@@ -32,7 +32,7 @@ Keep these variables outside the Blueprint and source control. Shopify's client 
    `https://operations-desk.onrender.com/api/integrations/gmail/callback`
 
 4. Save its client ID and client secret in Render's variables above and restart/deploy the service with the updated environment.
-5. Sign in to Operations desk as the workspace owner, open **Connections**, and select **Connect Gmail**. Authorize **kamalb@nex3d.com**. The server rejects a different mailbox, validates OAuth state against the owner and their active session, and uses PKCE for the code exchange.
+5. Sign in to Operations desk as the workspace owner, open **Connections**, and select **Connect Gmail**, then **Continue to Google**. The authorization page opens in a new tab; use a regular supported browser. Authorize **kamalb@nex3d.com**. The link expires after ten minutes; prepare a new link if necessary. The server rejects a different mailbox, validates OAuth state against the owner and their active session, and uses PKCE for the code exchange. A disabled button means initial setup is missing; no connection request is running. Request errors remain visible beside the connection controls.
 6. Select **Sync now**. Verify recognizable real message subjects/senders and the successful sync timestamp. It fetches up to 25 INBOX messages and stores subjects, sender headers, dates, and snippets. It does not fetch attachments/full message bodies, send messages, or poll continuously. A later sync replaces the imported inbox snapshot; internal draft records are separate and preserved.
 
 ## Shopify
@@ -44,7 +44,7 @@ Keep these variables outside the Blueprint and source control. Shopify's client 
    `https://operations-desk.onrender.com/api/integrations/shopify/callback`
 
 4. Save the app's client ID and secret in Render and restart/deploy the service with that environment. Ensure the app version with these scopes/callbacks is available for installation on the intended store.
-5. In Operations desk → **Connections**, select **Connect Shopify** and approve installation for **barakatbrand.myshopify.com**. The server validates the callback signature with Shopify's official SDK, checks OAuth state and the active owner session, and rejects a different store.
+5. In Operations desk → **Connections**, select **Connect Shopify**, then **Continue to Shopify**, and approve installation for **barakatbrand.myshopify.com** in the new tab. The server validates the callback signature with Shopify's official SDK, checks OAuth state and the active owner session, and rejects a different store.
 6. Select **Sync now** and verify a recognizable order and product. The GraphQL import uses API version `2026-10`, up to 25 recently updated orders and 25 recently updated products, and replaces the Shopify snapshot on success. It does not import all historic orders, modify products, or place purchases. A protected-data or permission denial must be resolved with Shopify before claiming readiness.
 
 ## Team accounts

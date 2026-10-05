@@ -149,14 +149,32 @@ async function renderConnections(container) {
     if (connection.lastSync) card.append(el('div',`Last successful sync: ${new Date(connection.lastSync).toLocaleString()}`,'meta'));
     if (currentUser.role === 'owner') {
       const actions = el('div',undefined,'actions'), connect = el('button',connection.connected ? 'Reconnect' : `Connect ${connection.provider === 'gmail' ? 'Gmail' : 'Shopify'}`);
+      const feedback = el('p',undefined,'connection-feedback'); feedback.setAttribute('role','status');
       connect.disabled = !connection.configured;
-      connect.onclick = async () => { connect.disabled = true; try { const result = await api(`/api/integrations/${connection.provider}/connect`,{}); location.assign(result.url); } catch(error) { connect.disabled = false; notice(error.message); } };
+      if (!connection.configured) {
+        feedback.textContent = `Connection is unavailable until your ${connection.provider === 'gmail' ? 'Google' : 'Shopify'} application is configured in Render. No connection request is running.`;
+        connect.title = 'Provider application setup is required';
+      }
+      connect.onclick = async () => {
+        connect.disabled = true; connect.setAttribute('aria-busy','true'); feedback.textContent = 'Preparing your secure sign-in link…';
+        try {
+          const result = await api(`/api/integrations/${connection.provider}/connect`,{});
+          const destination = new URL(result.url);
+          const expectedHost = connection.provider === 'gmail' ? destination.hostname === 'accounts.google.com' : /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(destination.hostname);
+          if (destination.protocol !== 'https:' || !expectedHost || destination.username || destination.password) throw new Error('The authorization address was unexpected. Try again or ask the workspace owner to check the connection setup.');
+          const link = el('a',connection.provider === 'gmail' ? 'Continue to Google' : 'Continue to Shopify','authorization-link');
+          link.href = destination.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          feedback.replaceChildren(el('span','Your sign-in link is ready. Open it in a new tab; it expires in 10 minutes. '),link);
+        } catch(error) {
+          feedback.textContent = error.name === 'TimeoutError' || error.name === 'AbortError' ? 'The app did not respond within 10 seconds. Refresh the page and try again; if it continues, check the Render service logs.' : error.message;
+        } finally { connect.disabled = false; connect.removeAttribute('aria-busy'); }
+      };
       actions.append(connect);
       if (connection.connected) {
         const sync = el('button','Sync now','quiet'); sync.onclick = async () => { sync.disabled = true; sync.textContent = 'Syncing…'; try { const result = await api(`/api/integrations/${connection.provider}/sync`,{}); await render(); notice(`Imported ${result.count} records.`); } catch(error) { notice(error.message); } finally { sync.disabled = false; sync.textContent = 'Sync now'; } }; actions.append(sync);
         const disconnect = el('button','Disconnect','quiet'); disconnect.onclick = async () => { if (!confirm('Remove this connection and its imported snapshot? Revoke access in the provider account separately.')) return; try { await api(`/api/integrations/${connection.provider}/disconnect`,{}); await render(); } catch(error) { notice(error.message); } }; actions.append(disconnect);
       }
-      card.append(actions);
+      card.append(actions,feedback);
     } else card.append(el('p','Your workspace owner manages these connections.'));
     container.append(card);
   }
