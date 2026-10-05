@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Operations desk</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+<div id="notice" role="status" aria-live="polite"></div>
+<section id="login" class="login-card">
+  <span class="eyebrow">YOUR SHARED WORKSPACE</span><h1>Operations desk</h1>
+  <p>Keep customer work, orders, and follow-ups in one place.</p>
+  <p id="connection-status" role="status">Connecting to the app… If this message remains, the app’s scripts or server could not be reached.</p>
+  <noscript><p>JavaScript is required to use this app. Enable it and reload the page.</p></noscript>
+  <form id="login-form"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button disabled>Sign in</button></form>
+</section>
+<div id="workspace" hidden>
+  <aside><a class="brand" href="/">Operations<span>desk</span></a><nav id="nav" aria-label="Work areas"></nav><div class="account"><span id="user"></span><button id="logout" class="quiet">Sign out</button></div></aside>
+  <main>
+    <header><div><span class="eyebrow">BUSINESS OPERATIONS</span><h1 id="heading">Overview</h1></div><button id="new-record">+ New record</button></header>
+    <div class="connection-note"><strong>Local workspace · Accounts not connected</strong><span>Gmail and Shopify sync, email sending, supplier ordering, and product publishing are not active. Approvals here update your records only.</span></div>
+    <section id="stats" class="stats"></section>
+    <div class="toolbar"><label class="search-label">Search<input id="search" type="search" placeholder="Title, customer, or notes"></label><label>Status<select id="filter"><option value="">All statuses</option><option>draft</option><option value="pending_review">Pending review</option><option>approved</option><option>open</option><option value="in_progress">In progress</option><option>done</option><option>ordered</option><option>shipped</option><option>delivered</option><option>fulfilled</option><option>paid</option></select></label><button id="refresh" class="quiet">Refresh</button></div>
+    <section id="records" aria-live="polite"></section>
+    <footer>Shared records · Manual tax entry · No external actions are performed</footer>
+  </main>
+</div>
+<dialog id="editor"><form id="record-form"><div class="dialog-heading"><h2>New record</h2><button type="button" id="close-editor" class="quiet" aria-label="Close">✕</button></div>
+  <label>Record type<select name="type" id="record-type"><option value="quote">Quote</option><option value="order">Order</option><option value="invoice">Invoice</option><option value="task">Follow-up / marketing task</option><option value="product">Shopify product draft</option><option value="message">Email draft / inbox note</option><option value="shipment">Dropship shipment</option></select></label>
+  <label>Title<input name="title" maxlength="160" required placeholder="What needs to happen?"></label>
+  <div class="two-col"><label>Customer / recipient<input name="contact" maxlength="160"></label><label>Assigned to<input name="assignee" maxlength="80"></label></div>
+  <div class="two-col"><label>Due date<input name="due" type="date"></label><label>Currency<input name="currency" value="USD" maxlength="3" pattern="[A-Z]{3}"></label></div>
+  <fieldset id="sales-fields"><legend>Line items</legend><div id="line-items"></div><button type="button" id="add-line" class="quiet">+ Add line</button><div class="two-col"><label>Shipping amount<input name="shipping" type="number" min="0" step="0.01" value="0"></label><label>Tax amount<input name="tax" type="number" min="0" step="0.01" value="0"></label></div><p class="hint">Enter tax based on your applicable rates. This app does not calculate sales tax.</p></fieldset>
+  <div id="shipment-fields" class="two-col" hidden><label>US supplier<input name="supplier" maxlength="160"></label><label>Tracking / carrier reference<input name="tracking" maxlength="160"></label></div>
+  <label>Notes / draft content<textarea name="notes" rows="5" maxlength="10000" placeholder="Details, email content, supplier instructions, or marketing brief"></textarea></label>
+  <button type="submit">Save record</button>
+</form></dialog>
+</body></html>

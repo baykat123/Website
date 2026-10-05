@@ -1,0 +1,27 @@
+# Deployment proposal for review. Creating this paid service incurs Render charges.
+# Deploy only for prototype validation until the production checklist is complete.
+services:
+  - type: web
+    name: operations-desk
+    runtime: node
+    plan: starter
+    numInstances: 1
+    buildCommand: npm test
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: false
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: OPS_HOST
+        value: 0.0.0.0
+      - key: OPS_DB_PATH
+        value: /var/data/operations.sqlite
+      - key: OPS_SECURE_COOKIES
+        value: "true"
+    disk:
+      name: operations-data
+      mountPath: /var/data
+      sizeGB: 1
