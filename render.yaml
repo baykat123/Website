@@ -6,7 +6,7 @@ services:
     runtime: node
     plan: starter
     numInstances: 1
-    buildCommand: npm test
+    buildCommand: npm ci && npm test
     startCommand: npm start
     healthCheckPath: /health
     autoDeploy: false
@@ -21,6 +21,14 @@ services:
         value: /var/data/operations.sqlite
       - key: OPS_SECURE_COOKIES
         value: "true"
+      - key: OPS_PUBLIC_URL
+        value: https://operations-desk.onrender.com
+      - key: GOOGLE_WORKSPACE_EMAIL
+        value: kamalb@nex3d.com
+      - key: SHOPIFY_SHOP
+        value: barakatbrand.myshopify.com
+      - key: OPS_TOKEN_KEY
+        generateValue: true
     disk:
       name: operations-data
       mountPath: /var/data

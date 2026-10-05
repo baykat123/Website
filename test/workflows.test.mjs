@@ -23,7 +23,7 @@ test('shared sales workflow enforces login, review, exact totals, concurrency, a
     assert.equal((await request('/api/records')).status,401);
     assert.equal((await request('/api/login',{username:'alice',password:'wrong'})).status,401);
     const login = await request('/api/login',{username:'alice',password});
-    assert.equal(login.status,200); assert.match(login.cookie,/HttpOnly/); assert.match(login.cookie,/SameSite=Strict/);
+    assert.equal(login.status,200); assert.match(login.cookie,/HttpOnly/); assert.match(login.cookie,/SameSite=Lax/);
     cookie = login.cookie.split(';')[0];
     assert.equal((await request('/api/records',{type:'task',title:'Forged'},{Origin:'https://attacker.example'})).status,403);
     assert.equal((await request('/api/records',{type:'quote',title:'Invalid cents',items:[{description:'Part',quantity:1,unitPrice:'1.001'}]})).status,400);

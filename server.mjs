@@ -4,12 +4,15 @@ import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { openStore, authenticate, tokenHash } from './lib/store.mjs';
 import { validateRecord, editableBody } from './lib/records.mjs';
+import { handleTeam } from './lib/team.mjs';
+import { createIntegrations } from './lib/integrations.mjs';
 
-const publicFiles = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+const publicFiles = { '/': ['index.html', 'text/html'], '/join': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
 const decodeRow = row => row && ({ ...row, body: JSON.parse(row.body) });
-export function createApp({ dbPath, secureCookies = false } = {}) {
+export function createApp({ dbPath, secureCookies = false, integrations: integrationOptions } = {}) {
   const db = openStore(dbPath ?? process.env.OPS_DB_PATH ?? '/workspace/.business-operations/operations.sqlite');
   const loginAttempts = new Map();
+  const integrations = createIntegrations(db,integrationOptions);
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -18,7 +21,7 @@ export function createApp({ dbPath, secureCookies = false } = {}) {
     res.setHeader('Cache-Control', 'no-store');
     const json = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
     try {
-      const path = new URL(req.url, 'http://localhost').pathname;
+      const url = new URL(req.url, 'http://localhost'), path = url.pathname;
       if (req.method === 'GET' && publicFiles[path]) {
         const [file, type] = publicFiles[path];
         res.writeHead(200, { 'Content-Type': type });
@@ -35,7 +38,7 @@ export function createApp({ dbPath, secureCookies = false } = {}) {
         if (!body || typeof body !== 'object' || Array.isArray(body)) return json(400, { error: 'JSON object required' });
       }
       const cookie = req.headers.cookie?.split(';').map(s => s.trim()).find(s => s.startsWith('ops_session='))?.slice(12);
-      const user = cookie && db.prepare('SELECT users.id,users.username FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?').get(tokenHash(cookie), Date.now());
+      const user = cookie && db.prepare('SELECT users.id,users.username,users.email,users.role FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?').get(tokenHash(cookie), Date.now());
       if (req.method === 'POST' && path === '/api/login') {
         if (typeof body.username !== 'string' || typeof body.password !== 'string' || body.password.length > 1000 || body.username.length > 80) return json(400, { error: 'Username and password required' });
         const key = req.socket.remoteAddress;
@@ -49,18 +52,28 @@ export function createApp({ dbPath, secureCookies = false } = {}) {
         db.prepare('DELETE FROM sessions WHERE expires<=?').run(now);
         const token = randomBytes(32).toString('hex');
         db.prepare('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)').run(tokenHash(token), found.id, now + 28800000);
-        res.setHeader('Set-Cookie', `ops_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800${secureCookies ? '; Secure' : ''}`);
+        res.setHeader('Set-Cookie', `ops_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800${secureCookies ? '; Secure' : ''}`);
         return json(200, found);
       }
+      if (handleTeam({db,path,req,body,user,json,res})) return;
+      if (await integrations.handle({db,path,req,body,user,sessionHash:cookie ? tokenHash(cookie) : '',json,res,url})) return;
       if (!user) return json(401, { error: 'Sign in required' });
-      if (req.method === 'GET' && path === '/api/me') return json(200, user);
+      if (req.method === 'GET' && path === '/api/me') {
+        // Upgrade existing Strict cookies so returning OAuth redirects retain the initiating session.
+        const session = db.prepare('SELECT expires FROM sessions WHERE token=?').get(tokenHash(cookie));
+        res.setHeader('Set-Cookie',`ops_session=${cookie}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.max(0,Math.floor((session.expires-Date.now())/1000))}${secureCookies ? '; Secure' : ''}`);
+        return json(200,user);
+      }
       if (req.method === 'POST' && path === '/api/logout') {
         db.prepare('DELETE FROM sessions WHERE token=?').run(tokenHash(cookie));
-        res.setHeader('Set-Cookie', 'ops_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
+        res.setHeader('Set-Cookie', 'ops_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
         return json(200, { ok: true });
       }
       if (req.method === 'GET' && path === '/api/records') return json(200, db.prepare('SELECT * FROM records ORDER BY updated_at DESC,id DESC').all().map(decodeRow));
-      if (req.method === 'GET' && path === '/api/audit') return json(200, db.prepare('SELECT audit.*,users.username FROM audit JOIN users ON users.id=audit.user_id ORDER BY audit.id DESC LIMIT 100').all());
+      if (req.method === 'GET' && path === '/api/audit') return json(200, db.prepare(`SELECT * FROM (
+        SELECT audit.id,audit.user_id,audit.record_id,audit.action,audit.at,users.username FROM audit JOIN users ON users.id=audit.user_id
+        UNION ALL SELECT events.id,events.user_id,NULL AS record_id,events.action,events.at,users.username FROM events JOIN users ON users.id=events.user_id
+      ) ORDER BY at DESC,id DESC LIMIT 100`).all());
       const now = new Date().toISOString();
       function insert(type, data, action = 'created') {
         db.exec('BEGIN IMMEDIATE');
@@ -113,6 +126,7 @@ export function createApp({ dbPath, secureCookies = false } = {}) {
       }
       return json(404, { error: 'Not found' });
     } catch (error) {
+      if (error.status) return json(error.status,{error:error.message});
       if (/required|Invalid|Unknown|must|Amounts|Each item|Add between|limit|currency/.test(error.message)) return json(400, { error: error.message });
       console.error('Request failed:', error.message);
       return json(500, { error: 'Unable to complete the request' });

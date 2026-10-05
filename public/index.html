@@ -10,11 +10,12 @@
   <noscript><p>JavaScript is required to use this app. Enable it and reload the page.</p></noscript>
   <form id="login-form"><label>Username<input name="username" autocomplete="username" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label><button disabled>Sign in</button></form>
 </section>
+<section id="join" class="login-card" hidden><span class="eyebrow">TEAM INVITATION</span><h1>Join the workspace</h1><p>Create your own account using the invitation your workspace owner shared.</p><form id="join-form"><label>Choose a username<input name="username" required minlength="2" maxlength="80" autocomplete="username" pattern="[a-zA-Z0-9._@-]+"></label><label>Create a password<input name="password" type="password" required minlength="14" maxlength="1000" autocomplete="new-password"></label><label>Confirm password<input name="confirmPassword" type="password" required minlength="14" maxlength="1000" autocomplete="new-password"></label><button>Create account</button></form><p id="join-status" role="status"></p></section>
 <div id="workspace" hidden>
   <aside><a class="brand" href="/">Operations<span>desk</span></a><nav id="nav" aria-label="Work areas"></nav><div class="account"><span id="user"></span><button id="logout" class="quiet">Sign out</button></div></aside>
   <main>
     <header><div><span class="eyebrow">BUSINESS OPERATIONS</span><h1 id="heading">Overview</h1></div><button id="new-record">+ New record</button></header>
-    <div class="connection-note"><strong>Local workspace · Accounts not connected</strong><span>Gmail and Shopify sync, email sending, supplier ordering, and product publishing are not active. Approvals here update your records only.</span></div>
+    <div class="connection-note"><strong>Shared operations workspace</strong><span>Connect Gmail and Shopify under Connections for manual read-only imports. Email sending, supplier purchasing, and product publishing are not active. Approvals update internal records only.</span></div>
     <section id="stats" class="stats"></section>
     <div class="toolbar"><label class="search-label">Search<input id="search" type="search" placeholder="Title, customer, or notes"></label><label>Status<select id="filter"><option value="">All statuses</option><option>draft</option><option value="pending_review">Pending review</option><option>approved</option><option>open</option><option value="in_progress">In progress</option><option>done</option><option>ordered</option><option>shipped</option><option>delivered</option><option>fulfilled</option><option>paid</option></select></label><button id="refresh" class="quiet">Refresh</button></div>
     <section id="records" aria-live="polite"></section>

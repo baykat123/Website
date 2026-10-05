@@ -1,17 +1,20 @@
 const $ = selector => document.querySelector(selector);
-const areas = [['overview','Overview'],['quote','Quotes'],['order','Orders'],['invoice','Invoices'],['task','Follow-ups & marketing'],['message','Email drafts'],['shipment','Dropship shipments'],['product','Product drafts'],['approvals','Review queue'],['audit','Activity']];
-let area = 'overview', records = [], noticeTimer, editing = null;
+const areas = [['overview','Overview'],['quote','Quotes'],['order','Orders'],['invoice','Invoices'],['task','Follow-ups & marketing'],['message','Email drafts'],['shipment','Dropship shipments'],['product','Product drafts'],['approvals','Review queue'],['connections','Connections'],['team','Team & account'],['audit','Activity']];
+const requestedView = new URLSearchParams(location.search).get('view');
+let area = requestedView === 'connections' ? 'connections' : 'overview', records = [], noticeTimer, editing = null, currentUser = null;
+let inviteToken = location.pathname === '/join' ? new URLSearchParams(location.search).get('token') : null;
+if (inviteToken) history.replaceState(null,'','/join');
 function el(tag, text, className) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
 function notice(message) { $('#notice').textContent = message; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').textContent = '', 6000); }
 async function api(path, body) {
-  const response = await fetch(path, { signal: AbortSignal.timeout(10000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
+  const response = await fetch(path, { signal: AbortSignal.timeout(path.endsWith('/sync') ? 120000 : 10000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('The app server could not be reached. Open the app through its running server, rather than a file or static preview.');
   const data = await response.json();
   if (!response.ok) { if (response.status === 401 && path !== '/api/login') showLogin(); throw new Error(data.error ?? 'Request failed'); }
   return data;
 }
 function showLogin() { records = []; $('#records').replaceChildren(); $('#stats').replaceChildren(); $('#editor').close(); $('#workspace').hidden = true; $('#login').hidden = false; }
-async function start(user) { $('#user').textContent = user.username; $('#login').hidden = true; $('#workspace').hidden = false; await refresh(); }
+async function start(user) { currentUser = user; $('#user').textContent = `${user.username} · ${user.role}`; $('#join').hidden = true; $('#login').hidden = true; $('#workspace').hidden = false; await refresh(); }
 async function refresh() { records = await api('/api/records'); await render(); }
 const readable = status => status.replaceAll('_', ' ');
 function money(cents, currency) { try { return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(cents / 100); } catch { return `${currency} ${(cents / 100).toFixed(2)}`; } }
@@ -23,16 +26,19 @@ async function action(record, kind, status) {
 }
 async function render() {
   $('#heading').textContent = areas.find(entry => entry[0] === area)[1];
-  $('#new-record').hidden = area === 'audit';
+  $('#new-record').hidden = ['audit','connections','team'].includes(area);
+  $('.toolbar').hidden = ['audit','connections','team'].includes(area);
   $('#stats').replaceChildren();
   const today = new Date().toLocaleDateString('en-CA');
   const overdue = records.filter(record => record.body.due && record.body.due < today && !['done','paid','fulfilled','delivered'].includes(record.body.status));
   const stats = [['Shared records', records.length], ['Awaiting review', records.filter(record => record.body.status === 'pending_review').length], ['Past due', overdue.length]];
   for (const [label, count] of stats) { const card = el('div',undefined,'stat'); card.append(el('span',label),el('strong',String(count))); $('#stats').append(card); }
   const container = $('#records'); container.replaceChildren();
+  if (area === 'team') { await renderTeam(container); return; }
+  if (area === 'connections') { await renderConnections(container); return; }
   if (area === 'audit') {
     const events = await api('/api/audit');
-    for (const event of events) container.append(el('div',`${event.username} · #${event.record_id} · ${event.action} · ${new Date(event.at).toLocaleString()}`,'audit'));
+    for (const event of events) container.append(el('div',`${event.username}${event.record_id ? ` · #${event.record_id}` : ''} · ${event.action} · ${new Date(event.at).toLocaleString()}`,'audit'));
     if (!events.length) container.append(el('p','Activity will appear after records are created.'));
     return;
   }
@@ -101,7 +107,80 @@ $('#record-form').onsubmit = async event => {
   if (['quote','order','invoice'].includes(body.type)) body.items = [...$('#line-items').children].map(row => Object.fromEntries([...row.querySelectorAll('input')].map(input => [input.dataset.field,input.value])));
   try { await api(editing ? `/api/records/${editing.id}` : '/api/records',body); $('#editor').close(); await refresh(); notice('Record saved.'); } catch (error) { notice(error.message); } finally { button.disabled = false; }
 };
+function field(label, name, type = 'text') {
+  const wrapper = el('label',label), input = el('input'); input.name = name; input.type = type; input.required = true;
+  if (type === 'password') { input.minLength = 14; input.maxLength = 1000; input.autocomplete = name === 'currentPassword' ? 'current-password' : 'new-password'; }
+  wrapper.append(input); return wrapper;
+}
+async function renderTeam(container) {
+  if (currentUser.role === 'owner') {
+    const data = await api('/api/team'), card = el('section',undefined,'record'); card.append(el('h2','Team members'));
+    for (const user of data.users) card.append(el('p',`${user.username} · ${user.role}${user.email ? ` · ${user.email}` : ''}`));
+    const form = el('form'), email = field('Invite by email','email','email'), button = el('button','Create invitation link');
+    const output = el('div');
+    form.append(email,button); card.append(el('h2','Invite a teammate'),el('p','Links expire after 48 hours and can be used once. Share the link directly with that person; this app does not email invitations.'),form,output);
+    form.onsubmit = async event => {
+      event.preventDefault(); button.disabled = true;
+      try {
+        const result = await api('/api/team/invite',Object.fromEntries(new FormData(form))), input = el('input'); input.readOnly = true; input.value = location.origin + result.path; input.setAttribute('aria-label','Invitation link'); input.onclick = () => input.select();
+        output.replaceChildren(el('p','Copy this private invitation link and send it to your teammate:'),input);
+      } catch(error) { notice(error.message); } finally { button.disabled = false; }
+    };
+    container.append(card);
+  } else container.append(el('p','Your workspace owner can invite additional teammates.'));
+  const card = el('section',undefined,'record'), form = el('form'), button = el('button','Change password and sign out');
+  card.append(el('h2','Change your password'),el('p','Use at least 14 characters. Changing your password ends all of your active sessions.'));
+  const current = field('Current password','currentPassword','password'); current.querySelector('input').minLength = 1;
+  form.append(current,field('New password','newPassword','password'),field('Confirm new password','confirmPassword','password'),button); card.append(form); container.append(card);
+  form.onsubmit = async event => {
+    event.preventDefault(); const values = Object.fromEntries(new FormData(form));
+    if (values.newPassword !== values.confirmPassword) return notice('The new passwords do not match.');
+    button.disabled = true;
+    try { await api('/api/password',values); form.reset(); showLogin(); notice('Password changed. Sign in with your new password.'); }
+    catch(error) { notice(error.message); } finally { button.disabled = false; }
+  };
+}
+async function renderConnections(container) {
+  const connections = await api('/api/integrations');
+  for (const connection of connections) {
+    const card = el('section',undefined,'record'), name = connection.provider === 'gmail' ? 'Google Workspace Gmail' : 'Shopify';
+    card.append(el('h2',name),el('p',connection.connected ? `Connected: ${connection.account}` : connection.configured ? 'Ready to connect your account.' : 'Initial provider application setup is still required.'));
+    card.append(el('p',connection.provider === 'gmail' ? 'Sync imports up to 25 inbox message subjects, senders, and previews. It does not send messages or monitor continuously.' : 'Sync imports up to 25 recent orders and 25 recently updated products. It does not publish products or place orders.'));
+    if (connection.lastSync) card.append(el('div',`Last successful sync: ${new Date(connection.lastSync).toLocaleString()}`,'meta'));
+    if (currentUser.role === 'owner') {
+      const actions = el('div',undefined,'actions'), connect = el('button',connection.connected ? 'Reconnect' : `Connect ${connection.provider === 'gmail' ? 'Gmail' : 'Shopify'}`);
+      connect.disabled = !connection.configured;
+      connect.onclick = async () => { connect.disabled = true; try { const result = await api(`/api/integrations/${connection.provider}/connect`,{}); location.assign(result.url); } catch(error) { connect.disabled = false; notice(error.message); } };
+      actions.append(connect);
+      if (connection.connected) {
+        const sync = el('button','Sync now','quiet'); sync.onclick = async () => { sync.disabled = true; sync.textContent = 'Syncing…'; try { const result = await api(`/api/integrations/${connection.provider}/sync`,{}); await render(); notice(`Imported ${result.count} records.`); } catch(error) { notice(error.message); } finally { sync.disabled = false; sync.textContent = 'Sync now'; } }; actions.append(sync);
+        const disconnect = el('button','Disconnect','quiet'); disconnect.onclick = async () => { if (!confirm('Remove this connection and its imported snapshot? Revoke access in the provider account separately.')) return; try { await api(`/api/integrations/${connection.provider}/disconnect`,{}); await render(); } catch(error) { notice(error.message); } }; actions.append(disconnect);
+      }
+      card.append(actions);
+    } else card.append(el('p','Your workspace owner manages these connections.'));
+    container.append(card);
+  }
+  const imported = await api('/api/integrations/records');
+  if (imported.length) container.append(el('h2','Imported account records'));
+  for (const record of imported) {
+    const card = el('article',undefined,'record'), b = record.body;
+    card.append(el('h2',b.title),el('div',`${record.provider} · ${record.type} · Read-only snapshot`,'meta'));
+    if (b.contact) card.append(el('p',b.contact));
+    if (b.notes) card.append(el('p',b.notes,'notes'));
+    if (b.amount) card.append(el('p',`${b.currency} ${b.amount} · ${b.financialStatus} · ${b.fulfillmentStatus}`));
+    if (b.status) card.append(el('p',`${b.status}${b.vendor ? ` · ${b.vendor}` : ''}`));
+    container.append(card);
+  }
+}
+$('#join-form').onsubmit = async event => {
+  event.preventDefault(); const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), button = form.querySelector('button');
+  if (values.password !== values.confirmPassword) { $('#join-status').textContent = 'Passwords do not match.'; return; }
+  button.disabled = true;
+  try { await api('/api/invites/accept',{...values,token:inviteToken}); inviteToken = null; form.reset(); $('#join').hidden = true; history.replaceState(null,'','/'); showLogin(); $('#login-form button').disabled = false; $('#connection-status').hidden = true; notice('Account created. Sign in with your new username and password.'); }
+  catch(error) { $('#join-status').textContent = error.message; } finally { button.disabled = false; }
+};
 async function initialize() {
+  if (inviteToken) { $('#login').hidden = true; $('#join').hidden = false; return; }
   try {
     const user = await api('/api/me');
     $('#connection-status').hidden = true;
