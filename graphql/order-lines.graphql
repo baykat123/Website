@@ -1,0 +1,13 @@
+query OperationsOrderLines($id: ID!, $after: String) {
+  order(id: $id) {
+    lineItems(first: 50, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id title sku currentQuantity unfulfilledQuantity requiresShipping
+        originalUnitPriceSet { shopMoney { amount currencyCode } }
+        priceAfterAllDiscountsBeforeTaxesSet { shopMoney { amount currencyCode } }
+        variant { id barcode inventoryItem { harmonizedSystemCode countryCodeOfOrigin } }
+      }
+    }
+  }
+}

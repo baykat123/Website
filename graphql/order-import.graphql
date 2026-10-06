@@ -1,0 +1,22 @@
+query OperationsOrders($after: String) {
+  orders(first: 5, after: $after, sortKey: UPDATED_AT, reverse: true) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id name createdAt updatedAt cancelledAt email note taxesIncluded
+      displayFinancialStatus displayFulfillmentStatus
+      currentTotalPriceSet { shopMoney { amount currencyCode } }
+      currentTotalTaxSet { shopMoney { amount currencyCode } }
+      currentShippingPriceSet { shopMoney { amount currencyCode } }
+      shippingAddress { name address1 address2 city provinceCode countryCodeV2 zip phone }
+      lineItems(first: 20) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id title sku currentQuantity unfulfilledQuantity requiresShipping
+          originalUnitPriceSet { shopMoney { amount currencyCode } }
+          priceAfterAllDiscountsBeforeTaxesSet { shopMoney { amount currencyCode } }
+          variant { id barcode inventoryItem { harmonizedSystemCode countryCodeOfOrigin } }
+        }
+      }
+    }
+  }
+}

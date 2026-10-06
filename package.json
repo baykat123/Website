@@ -13,6 +13,7 @@
     "create-user": "node scripts/create-user.mjs"
   },
   "dependencies": {
-    "@shopify/shopify-api": "15.0.0"
+    "@shopify/shopify-api": "15.0.0",
+    "pdfkit": "0.20.2"
   }
 }

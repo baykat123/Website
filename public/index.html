@@ -15,11 +15,11 @@
   <aside><a class="brand" href="/">Operations<span>desk</span></a><nav id="nav" aria-label="Work areas"></nav><div class="account"><span id="user"></span><button id="logout" class="quiet">Sign out</button></div></aside>
   <main>
     <header><div><span class="eyebrow">BUSINESS OPERATIONS</span><h1 id="heading">Overview</h1></div><button id="new-record">+ New record</button></header>
-    <div class="connection-note"><strong>Shared operations workspace</strong><span>Connect Gmail and Shopify under Connections for manual read-only imports. Email sending, supplier purchasing, and product publishing are not active. Approvals update internal records only.</span></div>
+    <div class="connection-note"><strong>Shared operations workspace</strong><span>Scan every required item before shipping. Review proposed replies and labels before execution. Connection status and permissions control available actions.</span></div>
     <section id="stats" class="stats"></section>
-    <div class="toolbar"><label class="search-label">Search<input id="search" type="search" placeholder="Title, customer, or notes"></label><label>Status<select id="filter"><option value="">All statuses</option><option>draft</option><option value="pending_review">Pending review</option><option>approved</option><option>open</option><option value="in_progress">In progress</option><option>done</option><option>ordered</option><option>shipped</option><option>delivered</option><option>fulfilled</option><option>paid</option></select></label><button id="refresh" class="quiet">Refresh</button></div>
+    <div class="toolbar"><label class="search-label">Search<input id="search" type="search" placeholder="Title, customer, or notes"></label><label>Status<select id="filter"><option value="">All statuses</option><option>draft</option><option value="pending_review">Pending review</option><option>approved</option><option>open</option><option value="in_progress">In progress</option><option>done</option><option>ordered</option><option>shipped</option><option>delivered</option><option>fulfilled</option><option>paid</option></select></label><label>Work<select id="work-filter"><option value="">Everyone</option><option value="mine">My work</option><option value="overdue">Past due</option></select></label><button id="refresh" class="quiet">Refresh</button></div>
     <section id="records" aria-live="polite"></section>
-    <footer>Shared records · Manual tax entry · No external actions are performed</footer>
+    <footer>Shared records · Invoice drafts require review · External actions require approval</footer>
   </main>
 </div>
 <dialog id="editor"><form id="record-form"><div class="dialog-heading"><h2>New record</h2><button type="button" id="close-editor" class="quiet" aria-label="Close">✕</button></div>
@@ -27,7 +27,7 @@
   <label>Title<input name="title" maxlength="160" required placeholder="What needs to happen?"></label>
   <div class="two-col"><label>Customer / recipient<input name="contact" maxlength="160"></label><label>Assigned to<input name="assignee" maxlength="80"></label></div>
   <div class="two-col"><label>Due date<input name="due" type="date"></label><label>Currency<input name="currency" value="USD" maxlength="3" pattern="[A-Z]{3}"></label></div>
-  <fieldset id="sales-fields"><legend>Line items</legend><div id="line-items"></div><button type="button" id="add-line" class="quiet">+ Add line</button><div class="two-col"><label>Shipping amount<input name="shipping" type="number" min="0" step="0.01" value="0"></label><label>Tax amount<input name="tax" type="number" min="0" step="0.01" value="0"></label></div><p class="hint">Enter tax based on your applicable rates. This app does not calculate sales tax.</p></fieldset>
+  <fieldset id="sales-fields"><legend>Line items</legend><div id="line-items"></div><button type="button" id="add-line" class="quiet">+ Add line</button><div class="two-col"><label>Shipping amount<input name="shipping" type="number" min="0" step="0.01" value="0"></label><label>Tax amount<input name="tax" type="number" min="0" step="0.01" value="0"></label></div><output id="sales-total" class="total" aria-live="polite"></output><p class="hint">Enter tax based on your applicable rates. This app does not calculate sales tax.</p></fieldset>
   <div id="shipment-fields" class="two-col" hidden><label>US supplier<input name="supplier" maxlength="160"></label><label>Tracking / carrier reference<input name="tracking" maxlength="160"></label></div>
   <label>Notes / draft content<textarea name="notes" rows="5" maxlength="10000" placeholder="Details, email content, supplier instructions, or marketing brief"></textarea></label>
   <button type="submit">Save record</button>

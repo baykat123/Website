@@ -1,0 +1,21 @@
+query OperationsFulfillmentOrders($id: ID!, $after: String) {
+  order(id: $id) {
+    fulfillmentOrders(first: 10, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id status requestStatus
+        assignedLocation { location { id name } }
+        lineItems(first: 20) {
+          pageInfo { hasNextPage endCursor }
+          nodes { id remainingQuantity totalQuantity lineItem { id sku } }
+        }
+      }
+    }
+  }
+}
+mutation OperationsFulfillmentCreate($fulfillment: FulfillmentInput!) {
+  fulfillmentCreate(fulfillment: $fulfillment) {
+    fulfillment { id status trackingInfo { company number url } }
+    userErrors { field message }
+  }
+}

@@ -1,0 +1,9 @@
+query OperationsLocations($after: String) {
+  locations(first: 50, after: $after, includeInactive: false, includeLegacy: false) {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id name isActive fulfillsOnlineOrders
+      address { address1 address2 city provinceCode countryCode zip phone }
+    }
+  }
+}

@@ -1,66 +1,77 @@
-# Connect the business accounts
+# Account integrations
 
-The implementation supports owner-managed OAuth connections and **manual, read-only imports**. Production authorization and real-provider validation remain outstanding. It does not send mail, modify the mailbox, publish products, create Shopify orders, or monitor continuously.
+The existing Render app at https://operations-desk.onrender.com has Gmail and Canada Shopify read-only connections. New features below require the reviewed warehouse release and separately granted production permissions. Preserve `OPS_TOKEN_KEY`, provider applications, existing consent, and `/var/data/operations.sqlite` across releases. Never paste credentials into chat or commit them.
 
-## Render configuration
+## Configuration
 
-The Blueprint sets these non-secret values:
-
-- `OPS_PUBLIC_URL=https://operations-desk.onrender.com`
-- `GOOGLE_WORKSPACE_EMAIL=kamalb@nex3d.com`
-- `SHOPIFY_SHOP=barakatbrand.myshopify.com`
-
-It proposes a generated `OPS_TOKEN_KEY` for AES-256-GCM encryption of saved OAuth tokens. Apply the Blueprint update through Render before connecting. Preserve this key across deploys and back it up securely alongside your recovery procedure; a changed or missing key prevents existing credentials from decrypting. Never store the key in Git or share it in chat.
-
-The following credentials must be entered privately in **Render → operations-desk → Environment** after registering your provider applications:
-
-| Variable | Where to obtain it |
+| Setting | Purpose |
 | --- | --- |
-| `GOOGLE_CLIENT_ID` | Google Cloud OAuth web application |
-| `GOOGLE_CLIENT_SECRET` | The same Google OAuth application |
-| `SHOPIFY_CLIENT_ID` | Shopify app's client ID |
-| `SHOPIFY_CLIENT_SECRET` | The same Shopify app's client secret |
+| OPS_PUBLIC_URL | Exact HTTPS service URL |
+| OPS_TOKEN_KEY | Original secret for encrypted OAuth tokens; preserve it |
+| GOOGLE_WORKSPACE_EMAIL | Expected mailbox, currently kamalb@nex3d.com |
+| GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET | Existing Google OAuth web app credentials |
+| SHOPIFY_SHOP | Canada store, barakatbrand.myshopify.com |
+| SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET | Canada app credentials |
+| SHOPIFY_USA_SHOP | USA store, blckcompany.myshopify.com |
+| SHOPIFY_USA_CLIENT_ID / SHOPIFY_USA_CLIENT_SECRET | Separate USA app credentials |
+| OPS_ALLOW_GMAIL_SEND | Default false. `true` requests gmail.send at reconnect; granted scope is also checked before sending |
+| OPS_ALLOW_SHOPIFY_FULFILLMENT | Default false. `true` requests read/write merchant-managed fulfillment-order permissions; actual granted scopes are checked |
+| OPS_SYNC_INTERVAL_SECONDS | Default 0 (off); 60 or more enables read-only polling |
+| OPS_SHIPPING_MODE | Default simulation. `sandbox` accepts only marked fictional samples; `live` enables production adapters |
+| EASYSHIP_ENVIRONMENT | production or sandbox; sandbox token must use sandbox endpoint |
+| EASYSHIP_API_TOKEN | Private token for selected environment |
+| FREIGHTCOM_API_TOKEN | Private approved account API token |
+| FREIGHTCOM_PAYMENT_METHOD_ID | Approved account payment method identifier, required for booking |
+| OPS_SHIPPING_COMPARISON_CURRENCY | Default CAD. Common quote/charge currency; item declared currency remains the order currency |
 
-Keep these variables outside the Blueprint and source control. Shopify's client secret is needed locally to validate callback signatures; a network-only proxy placeholder cannot substitute for it. All of these values must be available to the actual Render app process, not just a development environment. Never ask the user to paste credential values into a chat.
+Flags alone do not expand existing provider permissions. Registration, scoped consent, deployment approval, verified warehouses/products, and provider validation remain separate requirements.
 
-## Google Workspace Gmail
+## Gmail
 
-1. In the business-owned Google Cloud organization/project, enable the Gmail API. Configure the Google Auth Platform application. Use **Internal** audience if the Workspace organization permits it, with access limited to authorized business users.
-2. Add `https://www.googleapis.com/auth/gmail.readonly`. This is a restricted scope. External application distribution may require Google's verification; Workspace administrators may also need to permit the app. Do not disable consent or bypass organizational restrictions.
-3. Create a **Web application** OAuth client. Register this exact authorized redirect URI:
+Callback: `https://operations-desk.onrender.com/api/integrations/gmail/callback`.
 
-   `https://operations-desk.onrender.com/api/integrations/gmail/callback`
+Owner initiates OAuth with PKCE and state/session binding. Exact expected mailbox is enforced. Tokens are encrypted; refresh preserves them. Imports paginate inbox message metadata/snippets, without full bodies or attachments. Staff cannot read raw inbox snapshots; linked order notes are shared. Exact reference/customer matches can link internally; ambiguous links need owner review.
 
-4. Save its client ID and client secret in Render's variables above and restart/deploy the service with the updated environment.
-5. Sign in to Operations desk as the workspace owner, open **Connections**, and select **Connect Gmail**, then **Continue to Google**. The authorization page opens in a new tab; use a regular supported browser. Authorize **kamalb@nex3d.com**. The link expires after ten minutes; prepare a new link if necessary. The server rejects a different mailbox, validates OAuth state against the owner and their active session, and uses PKCE for the code exchange. A disabled button means initial setup is missing; no connection request is running. Request errors remain visible beside the connection controls.
-6. Select **Sync now**. Verify recognizable real message subjects/senders and the successful sync timestamp. It fetches up to 25 INBOX messages and stores subjects, sender headers, dates, and snippets. It does not fetch attachments/full message bodies, send messages, or poll continuously. A later sync replaces the imported inbox snapshot; internal draft records are separate and preserved.
+Base scope is gmail.readonly. Approved plain-text replies additionally require gmail.send, explicit execution of the immutable approved proposal, and separate live capability flag. A stable Message-ID supports checking uncertain sends without blindly resending. No background sending or automatic mailbox edits occur. Google organization/provider requirements still apply.
 
-## Shopify
+## Shopify Canada and USA
 
-1. In the business's Shopify Dev Dashboard, create an app for **barakatbrand.myshopify.com** with the appropriate single-store/custom distribution. Configure non-embedded access for this standalone operations app. Use app URL `https://operations-desk.onrender.com`.
-2. Configure only `read_orders` and `read_products` for this initial integration. Complete Shopify's relevant app distribution and data access approvals. No customer address or payment details are requested by the current query; additional features will require a separate scope/data-access review.
-3. Register the exact OAuth redirect URI:
+Callbacks:
 
-   `https://operations-desk.onrender.com/api/integrations/shopify/callback`
+- `https://operations-desk.onrender.com/api/integrations/shopify/callback`
+- `https://operations-desk.onrender.com/api/integrations/shopify_usa/callback`
 
-4. Save the app's client ID and secret in Render and restart/deploy the service with that environment. Ensure the app version with these scopes/callbacks is available for installation on the intended store.
-5. In Operations desk → **Connections**, select **Connect Shopify**, then **Continue to Shopify**, and approve installation for **barakatbrand.myshopify.com** in the new tab. The server validates the callback signature with Shopify's official SDK, checks OAuth state and the active owner session, and rejects a different store.
-6. Select **Sync now** and verify a recognizable order and product. The GraphQL import uses API version `2026-10`, up to 25 recently updated orders and 25 recently updated products, and replaces the Shopify snapshot on success. It does not import all historic orders, modify products, or place purchases. A protected-data or permission denial must be resolved with Shopify before claiming readiness.
+Separate provider applications, credentials, tokens, OAuth states, and expected store identities prevent accidental cross-store writes. Shopify's SDK verifies callback signatures. API version is 2026-10. Imports paginate accessible orders and their line items; older history may require Shopify's additional authorization. Products are limited to 25 recent records. State/cancellation/current quantities are verified again before label purchase and fulfillment.
 
-## Team accounts
+Base scopes: read_orders, read_products. Optional shipping requires read_locations, read_merchant_managed_fulfillment_orders and write_merchant_managed_fulfillment_orders, appropriate app data access, and matching actual Shopify fulfillment location. Only scanned quantities for one supported domestic shipment/location are fulfilled. Multiple locations or incomplete routing block purchase. Shopify customer notification is off; the desk prepares a tracking reply for approval. Product publication and supplier orders have no live executor.
 
-The earliest existing account becomes the workspace owner during the additive database migration. For the original Render deployment this should be **kamal**. Existing passwords and business records are preserved. Owner accounts manage invitations/connections; members share business records and imported snapshots but cannot change account connections or invite teammates.
+## Freightcom and Easyship
 
-Use **Team & account → Invite by email** to create a private, one-time link valid for 48 hours. Share it directly with that person. The app does not email invitations. Creating a replacement invitation invalidates the prior unused link for that email. The recipient selects a username/password on the join page and receives member permissions. Never share invitation links publicly.
+Easyship Operations desk connection creation was approved. Access was narrowed to addresses/boxes/courier services read, label write, shipment read/write, shipment document/track/rate/tax read. Production and sandbox credentials are stored privately outside Git. Fictional Easyship sandbox rate → draft → label → tracking verification passed; no real paid label was purchased. Production credentials are not installed in Render by this code.
 
-Each user can change their password under **Team & account**; doing so revokes every existing session for that user. Sessions use HttpOnly cookies with SameSite=Lax so authenticated OAuth redirects can return; JSON mutation endpoints retain origin/content-type protections. There is no email-based password recovery or MFA yet. Invitation/account creation must be validated on the deployed service before onboarding real teammates.
+Freightcom's API access request was approved, submitted, and confirmed. Vendor approval is pending; adapter behavior is mocked in automated tests. Both accounts must be available for a complete comparison; partial provider failures are displayed and never presented as a verified best price across both.
 
-## Disconnecting and recovery
+Owner configures origins and SKU shipping declarations in Shipping setup & jobs. Live requests require verified HS classifications, company/contact addresses, and correct Shopify location. Saved packages normalize units and retain versioned quote snapshots. Changed order/package/origin/product data or expired quotes requires fresh comparison. Every unit must be scanned before owner approval. Paid/unknown label outcomes are reconciled from durable jobs, not automatically repurchased. An unpaid Easyship draft can be cancelled only after provider verification and explicit owner confirmation.
 
-Disconnect removes saved tokens, pending authorization states, and that provider's imported snapshot from this app. It does not revoke the provider's app permission. Revoke access separately in Google Workspace/Google Account or Shopify administration when required. Internal business records remain.
+Cross-border, dangerous-goods, multiple-parcel, and split fulfillment workflows are blocked pending implementation and actual carrier validation.
 
-Owner/password recovery and encryption-key recovery still require the operator's secure access to the hosting service. No browser API exposes saved tokens, password hashes, or the encryption key.
+## Bambu
 
-## Validation status
+API access for PRM and the USA supplier workflow is pending, as confirmed October 6, 2026. No email is required. Do not contact Bambu to request duplicate access, guess API endpoints, or treat portal sign-in as API permission. Internal purchase drafts, supplier SKU mapping, USA customer-order snapshots, approval revisions, and fictional inbound scans are implemented. Good/damaged/missing units and unique serial evidence are retained without changing live stock. Approved documentation and credentials are required before implementing/validating live supplier sync, receipt reconciliation, purchasing, and USA fulfillment.
 
-Automated tests use simulated provider responses to exercise authorization failure/success, PKCE, state/session binding, signature verification, encrypted storage, token refresh, import idempotency, provider denial, and preserving snapshots on failure. Those tests do not establish that Google/Shopify have authorized the live app. Validate consent, actual provider records, deploy/restart persistence, and provider revocation with the registered applications before enabling everyday use.
+- PRM: https://prm.bambulab.com/#/index
+- USA: https://us.store.bambulab.com/account
+
+## Support intake and approvals
+
+`/support` is a public support/warranty form. It returns a generic acknowledgment and does not reveal whether an order/customer exists. Requests and relevant email subjects await owner review. Verify identity/order before converting to a shared staff ticket. Customer attachments, automatic warranty decisions, refunds/replacements, and supplier escalation are not implemented.
+
+Owner handles private inbox links and external approvals. Members can scan, add intentional order notes, and work tickets. Editing proposals invalidates approval. Correction history reuses matching approved text; it is not AI training or permission for automatic execution.
+
+## Recovery and validation
+
+Disconnect removes that provider's saved tokens/imported snapshot, not durable order notes/tickets or provider-side app permissions. Revoke access in the provider account when required. Restore the original encryption key if tokens cannot be decrypted; never rotate it casually.
+
+Tests simulate provider authorization, signatures, encryption, snapshots, scopes, store separation, fulfillment, unknown sends/purchases, and privacy. They do not establish live write readiness. Preserve data and verify the approved live release separately.
+
+Warehouse addresses can be loaded directly from Shopify after read_locations is granted. Imported line items retain Shopify HS code and manufacturing country when provided. Battery and dangerous-goods declarations require explicit SKU review; missing declarations block production rate requests.

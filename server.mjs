@@ -5,14 +5,28 @@ import { randomBytes } from 'node:crypto';
 import { openStore, authenticate, tokenHash } from './lib/store.mjs';
 import { validateRecord, editableBody } from './lib/records.mjs';
 import { handleTeam } from './lib/team.mjs';
+import { createSupportHandler } from './lib/support.mjs';
+import { handleSuppliers } from './lib/suppliers.mjs';
+import { createSyncMonitor } from './lib/sync-monitor.mjs';
+import { createShipping } from './lib/shipping.mjs';
+import { createShippingJobs } from './lib/shipping-jobs.mjs';
+import { handlePackages } from './lib/packages.mjs';
+import { salesPdf } from './lib/sales-pdf.mjs';
+import { handleOperations } from './lib/operations.mjs';
+import { handleProposals } from './lib/proposals.mjs';
 import { createIntegrations } from './lib/integrations.mjs';
 
-const publicFiles = { '/': ['index.html', 'text/html'], '/join': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+const publicFiles = { '/': ['index.html', 'text/html'], '/join': ['index.html', 'text/html'], '/support': ['support.html','text/html'], '/support.js': ['support.js','text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
 const decodeRow = row => row && ({ ...row, body: JSON.parse(row.body) });
-export function createApp({ dbPath, secureCookies = false, integrations: integrationOptions } = {}) {
+export function createApp({ dbPath, secureCookies = false, integrations: integrationOptions, shipping: shippingOptions, monitor: monitorOptions } = {}) {
   const db = openStore(dbPath ?? process.env.OPS_DB_PATH ?? '/workspace/.business-operations/operations.sqlite');
+  db.prepare("UPDATE proposals SET status='unknown',version=version+1 WHERE status='executing'").run();
   const loginAttempts = new Map();
   const integrations = createIntegrations(db,integrationOptions);
+  const shipping = createShipping(shippingOptions);
+  const shippingJobs = createShippingJobs(db,shipping,{verifyOrder:integrations.verifyOrder,fulfill:integrations.fulfill});
+  const support = createSupportHandler(db);
+  const monitor = createSyncMonitor(db,integrations,monitorOptions);
   const server = createServer(async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -55,6 +69,13 @@ export function createApp({ dbPath, secureCookies = false, integrations: integra
         res.setHeader('Set-Cookie', `ops_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800${secureCookies ? '; Secure' : ''}`);
         return json(200, found);
       }
+      if (support({path,req,body,user,json})) return;
+      if (handleSuppliers({db,path,req,body,user,json})) return;
+      if (handlePackages({db,path,req,body,user,json})) return;
+      if (req.method==='GET'&&path==='/api/sync/status') { if(!user) return json(401,{error:'Sign in required'}); return json(200,monitor.status()); }
+      if (await shippingJobs.handle({path,req,body,user,json})) return;
+      if (await handleOperations({db,path,req,body,user,json,shipping,shippingJobs})) return;
+      if (await handleProposals({db,path,req,body,user,json,integrations})) return;
       if (handleTeam({db,path,req,body,user,json,res})) return;
       if (await integrations.handle({db,path,req,body,user,sessionHash:cookie ? tokenHash(cookie) : '',json,res,url})) return;
       if (!user) return json(401, { error: 'Sign in required' });
@@ -69,17 +90,25 @@ export function createApp({ dbPath, secureCookies = false, integrations: integra
         res.setHeader('Set-Cookie', 'ops_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
         return json(200, { ok: true });
       }
-      if (req.method === 'GET' && path === '/api/records') return json(200, db.prepare('SELECT * FROM records ORDER BY updated_at DESC,id DESC').all().map(decodeRow));
+      const pdfMatch = path.match(/^\/api\/records\/(\d+)\/pdf$/);
+      if (req.method === 'GET' && pdfMatch) {
+        const record = decodeRow(db.prepare('SELECT * FROM records WHERE id=?').get(Number(pdfMatch[1])));
+        if (!record || !['quote','order','invoice'].includes(record.type)) return json(404,{error:'Sales document not found'});
+        const buffer = await salesPdf(record);
+        res.writeHead(200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${record.type}-${record.id}.pdf"`}); res.end(buffer); return;
+      }
+      if (req.method === 'GET' && path === '/api/records') return json(200, db.prepare('SELECT records.*, (SELECT source_id FROM record_links WHERE target_id=records.id) AS source_id, (SELECT target_id FROM record_links WHERE source_id=records.id) AS target_id FROM records ORDER BY updated_at DESC,id DESC').all().map(decodeRow));
       if (req.method === 'GET' && path === '/api/audit') return json(200, db.prepare(`SELECT * FROM (
         SELECT audit.id,audit.user_id,audit.record_id,audit.action,audit.at,users.username FROM audit JOIN users ON users.id=audit.user_id
         UNION ALL SELECT events.id,events.user_id,NULL AS record_id,events.action,events.at,users.username FROM events JOIN users ON users.id=events.user_id
       ) ORDER BY at DESC,id DESC LIMIT 100`).all());
       const now = new Date().toISOString();
-      function insert(type, data, action = 'created') {
+      function insert(type, data, action = 'created', sourceId = null) {
         db.exec('BEGIN IMMEDIATE');
         try {
           const id = Number(db.prepare('INSERT INTO records(type,body,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(type, JSON.stringify(data), user.id, user.id, now, now).lastInsertRowid);
           db.prepare('INSERT INTO audit(user_id,record_id,action,at) VALUES(?,?,?,?)').run(user.id, id, action, now);
+          if (sourceId !== null) db.prepare('INSERT INTO record_links(source_id,target_id) VALUES(?,?)').run(sourceId,id);
           db.exec('COMMIT');
           return decodeRow(db.prepare('SELECT * FROM records WHERE id=?').get(id));
         } catch (error) { db.exec('ROLLBACK'); throw error; }
@@ -107,11 +136,14 @@ export function createApp({ dbPath, secureCookies = false, integrations: integra
         if (match[2] === 'convert') {
           const target = record.type === 'quote' ? 'order' : record.type === 'order' ? 'invoice' : null;
           if (!target || !['approved', 'fulfilled'].includes(record.body.status)) return json(400, { error: 'Approve the quote or order before converting it' });
+          const linked = db.prepare('SELECT records.* FROM record_links JOIN records ON records.id=record_links.target_id WHERE source_id=?').get(record.id);
+          if (linked) return json(200, decodeRow(linked));
           // Preserve totals but create a new draft; no external order is placed.
           const data = validateRecord(target, { ...editableBody(record.body), status: 'draft', notes: `${record.body.notes}\nCreated from ${record.type} #${record.id}`.trim() });
-          return json(201, insert(target, data, `created from ${record.type} #${record.id}`));
+          return json(201, insert(target, data, `created from ${record.type} #${record.id}`, record.id));
         }
         if (match[2] === 'status') {
+          if (record.type === 'order' && body.status === 'fulfilled') return json(400,{error:'Manual fulfillment is disabled. Use verified packing and the shipping integration workflow.'});
           const transitions = { draft: ['pending_review'], pending_review: ['approved', 'draft'], approved: record.type === 'order' ? ['fulfilled'] : record.type === 'invoice' ? ['paid'] : [], open: record.type === 'task' ? ['in_progress', 'done'] : ['ordered'], in_progress: ['done'], ordered: ['shipped'], shipped: ['delivered'], done: ['open'] };
           if (!(transitions[record.body.status] ?? []).includes(body.status)) return json(400, { error: 'Invalid status transition' });
           const data = validateRecord(record.type, { ...editableBody(record.body), status: body.status });
@@ -132,6 +164,7 @@ export function createApp({ dbPath, secureCookies = false, integrations: integra
       return json(500, { error: 'Unable to complete the request' });
     }
   });
+  server.on('close',()=>{shippingJobs.stop();monitor.stop();});
   return { server, db };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

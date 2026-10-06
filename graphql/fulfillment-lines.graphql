@@ -1,0 +1,8 @@
+query OperationsFulfillmentLines($id: ID!, $after: String) {
+  fulfillmentOrder(id: $id) {
+    lineItems(first: 100, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes { id remainingQuantity totalQuantity lineItem { id sku } }
+    }
+  }
+}

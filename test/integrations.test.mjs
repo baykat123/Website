@@ -19,6 +19,20 @@ test('encrypted credentials reject tampering, wrong keys, and wrong provider con
   const parts=sealed.split('.');parts[2]=Buffer.from('tampered').toString('base64url');assert.throws(()=>decrypt(parts.join('.'),config.key,'gmail'));
 });
 
+test('warehouse discovery requires granted location scope, paginates active locations, and is owner-only',async()=>{
+  let calls=0;const {db,owner,service}=setup(async(url,options)=>{calls++;assert.equal(url,`https://${config.shop}/admin/api/2026-10/graphql.json`);const after=JSON.parse(options.body).variables.after;return response({data:{locations:{nodes:after?[{id:'gid://shopify/Location/2',name:'Inactive',isActive:false,fulfillsOnlineOrders:true,address:{}}]:[{id:'gid://shopify/Location/1',name:'Sample warehouse',isActive:true,fulfillsOnlineOrders:true,address:{address1:'Sample Street',city:'Toronto',countryCode:'CA',phone:'4165550100'}}],pageInfo:after?{hasNextPage:false}:{hasNextPage:true,endCursor:'next'}}}});},{allowFulfillment:true});
+  const context={path:'/api/integrations/shopify/locations',req:{method:'GET'},user:owner,json:(status,data)=>{context.result={status,data};}};
+  const save=scopes=>db.prepare("INSERT INTO connections(provider,account,encrypted_tokens,updated_at) VALUES('shopify',?,?,'now') ON CONFLICT(provider) DO UPDATE SET encrypted_tokens=excluded.encrypted_tokens").run(config.shop,encrypt({accessToken:'mock-token',scopes},config.key,'shopify'));
+  try{
+    save('read_orders,read_products');await assert.rejects(service.handle(context),/location-reading/);assert.equal(calls,0);assert.equal(service.status()[1].fulfillmentEnabled,false);
+    save('read_orders,read_products,read_locations,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders');
+    assert.equal(service.status()[1].fulfillmentEnabled,true);assert.equal(service.status()[1].locationsEnabled,true);
+    assert.equal(new URL(service.begin('shopify',owner,'mock-session')).searchParams.get('scope').includes('read_locations'),true);
+    await assert.rejects(service.handle({...context,user:{...owner,role:'member'}}),/owner/);
+    assert.equal(await service.handle(context),true);assert.equal(calls,2);assert.equal(context.result.status,200);assert.equal(context.result.data.length,1);assert.equal(context.result.data[0].address.countryCodeV2,'CA');assert.equal(context.result.data[0].store,config.shop);
+  }finally{db.close();}
+});
+
 test('Gmail OAuth binds state to owner and session, uses PKCE, refreshes encrypted tokens, and safely replaces inbox snapshots',async()=>{
   let authUrl,tokenRequests=0,wrongAccount=false,providerFails=false;
   const calls=[];
@@ -74,7 +88,7 @@ test('Shopify requires the expected store, SDK-validated HMAC and state, and imp
     if(url.endsWith('/oauth/access_token'))return response({access_token:'mock-shopify-token',scope:'read_orders,read_products'});
     if(url.endsWith('/graphql.json')) {
       assert.ok(!JSON.parse(options.body).query.includes('mutation'));
-      return response({data:{orders:{nodes:[{id:'gid://shopify/Order/1',name:'#1001',createdAt:'2026-10-04',displayFinancialStatus:'PAID',displayFulfillmentStatus:'UNFULFILLED',totalPriceSet:{shopMoney:{amount:'12.50',currencyCode:'USD'}}}]},products:{nodes:[{id:'gid://shopify/Product/1',title:'Test product',handle:'test',status:'ACTIVE',vendor:'Supplier'}]}}});
+      return response({data:{orders:{nodes:[{id:'gid://shopify/Order/1',name:'#1001',createdAt:'2026-10-04',displayFinancialStatus:'PAID',displayFulfillmentStatus:'UNFULFILLED',currentTotalPriceSet:{shopMoney:{amount:'12.50',currencyCode:'USD'}},currentShippingPriceSet:{shopMoney:{amount:'0',currencyCode:'USD'}},currentTotalTaxSet:{shopMoney:{amount:'0',currencyCode:'USD'}},lineItems:{nodes:[{id:'gid://shopify/LineItem/1',sku:'PART',title:'Part',currentQuantity:1,unfulfilledQuantity:1,requiresShipping:true,variant:{barcode:'12345'},originalUnitPriceSet:{shopMoney:{amount:'12.50',currencyCode:'USD'}},priceAfterAllDiscountsBeforeTaxesSet:{shopMoney:{amount:'12.50',currencyCode:'USD'}}}]} }]},products:{nodes:[{id:'gid://shopify/Product/1',title:'Test product',handle:'test',status:'ACTIVE',vendor:'Supplier'}]}}});
     }
     throw new Error('Unexpected endpoint');
   };
@@ -108,4 +122,58 @@ test('unconfigured connections remain disabled and expired OAuth state is reject
   const enabled=setup(()=>{throw new Error('No requests should be made');});
   try{const url=enabled.service.begin('gmail',enabled.owner,tokenHash('session'));enabled.db.exec('UPDATE oauth_states SET expires=0');await assert.rejects(enabled.service.finish('gmail',callbackParams(url),enabled.owner,tokenHash('session')),/expired/);}
   finally{enabled.db.close();}
+});
+
+test('Shopify fulfillment requires granted write scopes, unchanged orders, matching remaining quantities, and provider tracking',async()=>{
+  let changed=false,mutations=0;
+  const fetcher=async(url,options)=>{
+    const payload=JSON.parse(options.body);
+    if(payload.query.includes('OperationsOrderState'))return response({data:{order:{id:'gid://shopify/Order/1',updatedAt:changed?'changed':'original',cancelledAt:null,displayFulfillmentStatus:'UNFULFILLED'}}});
+    if(payload.query.includes('OperationsFulfillmentOrders'))return response({data:{order:{fulfillmentOrders:{pageInfo:{hasNextPage:false},nodes:[{id:'gid://shopify/FulfillmentOrder/1',status:'OPEN',assignedLocation:{location:{id:'gid://shopify/Location/1'}},lineItems:{pageInfo:{hasNextPage:false},nodes:[{id:'gid://shopify/FulfillmentOrderLineItem/1',remainingQuantity:2,lineItem:{id:'gid://shopify/LineItem/1'}}]}}]}}}});
+    if(payload.query.includes('mutation OperationsFulfillmentCreate')){mutations++;assert.equal(payload.variables.fulfillment.notifyCustomer,false);assert.equal(payload.variables.fulfillment.lineItemsByFulfillmentOrder[0].fulfillmentOrderLineItems[0].quantity,2);return response({data:{fulfillmentCreate:{fulfillment:{id:'gid://shopify/Fulfillment/1'},userErrors:[]}}});}
+    throw new Error('Unexpected query');
+  };
+  const {db,owner,service}=setup(fetcher,{allowFulfillment:true});
+  const order={store:config.shop,external_id:'gid://shopify/Order/1',body:{providerUpdatedAt:'original',items:[{lineId:'gid://shopify/LineItem/1',quantity:2}]}};
+  try{
+    db.prepare("INSERT INTO connections(provider,account,encrypted_tokens,updated_at) VALUES('shopify',?,?,?)").run(config.shop,encrypt({accessToken:'test-token',scopes:'read_orders,read_products'},config.key,'shopify'),'now');
+    await assert.rejects(service.verifyOrder(order),/permissions/);
+    db.prepare("UPDATE connections SET encrypted_tokens=? WHERE provider='shopify'").run(encrypt({accessToken:'test-token',scopes:'read_orders,read_products,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders'},config.key,'shopify'));
+    changed=true;await assert.rejects(service.verifyOrder(order),/changed/);changed=false;
+    await assert.rejects(service.fulfill(order,{tracking:'SIM-not-live'}),/Verified provider tracking/);
+    const result=await service.fulfill(order,{tracking:'TRACK-ONE',trackingUrl:'https://tracking.example.test/one'});assert.equal(result.id,'gid://shopify/Fulfillment/1');assert.equal(mutations,1);
+  }finally{db.close();}
+});
+
+test('USA Shopify OAuth uses separate state, encrypted token context, and store identity for colliding order IDs',async()=>{
+  const usaShop='usa-example.myshopify.com',usaSecret='test-usa-secret';
+  const fetcher=async(url,options)=>{
+    if(url.endsWith('/oauth/access_token'))return response({access_token:'mock-usa-token',scope:'read_orders,read_products'});
+    if(url.endsWith('/graphql.json'))return response({data:{orders:{nodes:[{id:'gid://shopify/Order/1',name:'#1001',createdAt:'2026-10-06',updatedAt:'now',displayFinancialStatus:'PAID',displayFulfillmentStatus:'UNFULFILLED',email:'sample@example.test',currentTotalPriceSet:{shopMoney:{amount:'10',currencyCode:'USD'}},currentTotalTaxSet:{shopMoney:{amount:'0',currencyCode:'USD'}},currentShippingPriceSet:{shopMoney:{amount:'0',currencyCode:'USD'}},lineItems:{nodes:[{id:'line-one',title:'Part',sku:'PART',currentQuantity:1,unfulfilledQuantity:1,requiresShipping:true,originalUnitPriceSet:{shopMoney:{amount:'10',currencyCode:'USD'}},priceAfterAllDiscountsBeforeTaxesSet:{shopMoney:{amount:'10',currencyCode:'USD'}}}],pageInfo:{hasNextPage:false}}}],pageInfo:{hasNextPage:false}},products:{nodes:[]}}});
+    throw new Error('Unexpected endpoint');
+  };
+  const {db,owner,service}=setup(fetcher,{usaShop,usaClientId:'test-usa-client',usaClientSecret:usaSecret}),session=tokenHash('session');
+  try{
+    const url=service.begin('shopify_usa',owner,session);assert.equal(new URL(url).hostname,usaShop);assert.match(new URL(url).searchParams.get('redirect_uri'),/shopify_usa\/callback$/);
+    const params=callbackParams(url,{shop:usaShop,timestamp:String(Math.floor(Date.now()/1000))}),sorted=new URLSearchParams([...params.entries()].sort(([a],[b])=>a.localeCompare(b)));params.set('hmac',createHmac('sha256',usaSecret).update(sorted.toString()).digest('hex'));
+    await service.finish('shopify_usa',params,owner,session);
+    assert.equal(service.status().find(item=>item.provider==='shopify_usa').account,usaShop);
+    const token=db.prepare("SELECT encrypted_tokens FROM connections WHERE provider='shopify_usa'").get();assert.equal(decrypt(token.encrypted_tokens,config.key,'shopify_usa').accessToken,'mock-usa-token');assert.throws(()=>decrypt(token.encrypted_tokens,config.key,'shopify'));
+    assert.equal((await service.sync('shopify_usa',owner)).count,1);
+    assert.equal(db.prepare('SELECT store FROM ops_orders').get().store,usaShop);
+    assert.equal(db.prepare('SELECT provider FROM external_records').get().provider,'shopify_usa');
+  }finally{db.close();}
+});
+
+test('Gmail approved sending uses a stable MIME message ID and treats a timeout as uncertain rather than retrying',async()=>{
+  let sends=0,timeout=false;
+  const {db,owner,service}=setup(async(url,options)=>{
+    if(url.endsWith('/messages/send')){sends++;const raw=Buffer.from(JSON.parse(options.body).raw,'base64url').toString();assert.match(raw,/To: recipient@example.test/);assert.match(raw,/Message-ID: <ops-operation-one@operations.example.test>/);assert.match(raw,/Content-Transfer-Encoding: base64/);if(timeout)throw new Error('Timeout');return response({id:'message-sent'});}
+    throw new Error('Unexpected request');
+  },{allowGmailSend:true});
+  try{
+    db.prepare("INSERT INTO connections(provider,account,encrypted_tokens,updated_at) VALUES('gmail',?,?,?)").run(config.gmailEmail,encrypt({accessToken:'test-token',scopes:'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send'},config.key,'gmail'),'now');
+    const payload={to:'recipient@example.test',subject:'Sample approved reply',content:'A test message.'};assert.equal((await service.sendGmail(payload,'operation-one')).id,'message-sent');
+    timeout=true;await assert.rejects(service.sendGmail(payload,'operation-one'),error=>error.unknown===true);assert.equal(sends,2);
+  }finally{db.close();}
 });

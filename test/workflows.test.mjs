@@ -42,10 +42,18 @@ test('shared sales workflow enforces login, review, exact totals, concurrency, a
     assert.equal(approved.status,200);
     assert.equal((await request(`/api/records/${id}`,{version:3,title:'Changed after approval'})).status,400);
     const order = await request(`/api/records/${id}/convert`,{version:3});
+    const repeatedOrder = await request(`/api/records/${id}/convert`,{version:3});
+    assert.equal(repeatedOrder.status,200); assert.equal(repeatedOrder.body.id,order.body.id);
     assert.equal(order.status,201); assert.equal(order.body.type,'order'); assert.equal(order.body.body.totalCents,28485); assert.equal(order.body.body.status,'draft');
     await request(`/api/records/${order.body.id}/status`,{version:1,status:'pending_review'});
     await request(`/api/records/${order.body.id}/status`,{version:2,status:'approved'});
+    assert.equal((await request(`/api/records/${order.body.id}/status`,{version:3,status:'fulfilled'})).status,400);
     const invoice = await request(`/api/records/${order.body.id}/convert`,{version:3});
+    const repeatedInvoice = await request(`/api/records/${order.body.id}/convert`,{version:3});
+    assert.equal(repeatedInvoice.status,200); assert.equal(repeatedInvoice.body.id,invoice.body.id);
+    const linkedRecords = (await request('/api/records')).body;
+    assert.equal(linkedRecords.find(r=>r.id===id).target_id,order.body.id);
+    assert.equal(linkedRecords.find(r=>r.id===invoice.body.id).source_id,order.body.id);
     assert.equal(invoice.status,201); assert.equal(invoice.body.type,'invoice'); assert.equal(invoice.body.body.totalCents,28485);
     const task = await request('/api/records',{type:'task',title:'Follow up',due:'2026-12-01'});
     assert.equal((await request(`/api/records/${task.body.id}`,{version:1,title:'Follow up tomorrow',due:'2026-12-02',assignee:'bob',status:'done'})).body.body.status,'open');
@@ -63,6 +71,7 @@ test('shared sales workflow enforces login, review, exact totals, concurrency, a
     assert.equal((await request('/api/records')).status,401);
     await new Promise(resolve => app.server.close(resolve)); app.db.close();
     app = createApp({ dbPath });
+    assert.equal(app.db.prepare('SELECT COUNT(*) AS count FROM record_links').get().count,2);
     assert.equal(app.db.prepare('SELECT COUNT(*) AS count FROM records').get().count,6);
     assert.equal(app.db.prepare('SELECT COUNT(*) AS count FROM users').get().count,2);
   } finally {
