@@ -9,7 +9,7 @@ import {syncOrderDesk} from '../lib/operations.mjs';
 
 test('order desk retains email notes and tickets, enforces scan quantities, and only simulates approved shipping',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'ops-desk-')),path=join(dir,'db.sqlite');
-  const app=createApp({dbPath:path});addUser(app.db,'owner','operations-test-password');addUser(app.db,'staff','operations-test-password');
+  const app=createApp({dbPath:path,integrations:{config:{}},shipping:{config:{mode:'simulation'}},monitor:{intervalSeconds:0}});addUser(app.db,'owner','operations-test-password');addUser(app.db,'staff','operations-test-password');
   const snapshot={title:'#SAMPLE-1001',items:[{sku:'PART-A',barcode:'123456',title:'Sample part',quantity:2,unitPriceCents:2500}],amount:'50',currency:'CAD',shippingCents:0,taxCents:0,financialStatus:'PAID'};
   app.db.prepare("INSERT INTO external_records VALUES('shopify','sample-order','order',?,?)").run(JSON.stringify(snapshot),new Date().toISOString());
   app.db.prepare("INSERT INTO external_records VALUES('gmail','sample-email','message',?,?)").run(JSON.stringify({title:'Question about #SAMPLE-1001',contact:'sample@example.com',notes:'Need assistance'}),new Date().toISOString());
