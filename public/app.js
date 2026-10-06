@@ -7,7 +7,7 @@ if (inviteToken) history.replaceState(null,'','/join');
 function el(tag, text, className) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (className) node.className = className; return node; }
 function notice(message) { $('#notice').textContent = message; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').textContent = '', 6000); }
 async function api(path, body) {
-  const response = await fetch(path, { signal: AbortSignal.timeout(/\/(sync|rates|book|reconcile|retry-tracking|execute)$/.test(path) ? 120000 : 10000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
+  const response = await fetch(path, { signal: AbortSignal.timeout(/\/(sync|rates|book|reconcile|retry-tracking|execute|permissions)$/.test(path) ? 120000 : 10000), ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
   if (!(response.headers.get('content-type') ?? '').includes('application/json')) throw new Error('The app server could not be reached. Open the app through its running server, rather than a file or static preview.');
   const data = await response.json();
   if (!response.ok) { if (response.status === 401 && path !== '/api/login') showLogin(); throw new Error(data.error ?? 'Request failed'); }
@@ -215,6 +215,7 @@ async function renderConnections(container) {
       };
       actions.append(connect);
       if (connection.connected) {
+        if(connection.provider!=='gmail'){const verify=el('button','Verify permissions','quiet');verify.onclick=async()=>{verify.disabled=true;try{await api(`/api/integrations/${connection.provider}/permissions`,{});await render();notice('Permissions verified with Shopify.');}catch(error){notice(error.message);verify.disabled=false;}};actions.append(verify);}
         const sync = el('button','Sync now','quiet'); sync.onclick = async () => { sync.disabled = true; sync.textContent = 'Syncing…'; try { const result = await api(`/api/integrations/${connection.provider}/sync`,{}); await render(); notice(`Imported ${result.count} records.`); } catch(error) { notice(error.message); } finally { sync.disabled = false; sync.textContent = 'Sync now'; } }; actions.append(sync);
         const disconnect = el('button','Disconnect','quiet'); disconnect.onclick = async () => { if (!confirm('Remove this connection and its imported snapshot? Revoke access in the provider account separately.')) return; try { await api(`/api/integrations/${connection.provider}/disconnect`,{}); await render(); } catch(error) { notice(error.message); } }; actions.append(disconnect);
       }

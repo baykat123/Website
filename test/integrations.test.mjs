@@ -33,6 +33,26 @@ test('warehouse discovery requires granted location scope, paginates active loca
   }finally{db.close();}
 });
 
+test('Shopify accepts write scopes that imply the requested read scopes without accepting a read-only fulfillment grant',async()=>{
+  let writable=true;
+  const {db,owner,service}=setup(async()=>response({access_token:'mock-authorization-token',scope:`read_orders,read_products,read_locations,${writable?'write':'read'}_merchant_managed_fulfillment_orders`}),{allowFulfillment:true});
+  const session=tokenHash('mock-session');
+  const params=()=>{const result=callbackParams(service.begin('shopify',owner,session),{shop:config.shop,timestamp:String(Math.floor(Date.now()/1000))});const sorted=new URLSearchParams([...result.entries()].sort(([a],[b])=>a.localeCompare(b)));result.set('hmac',createHmac('sha256',config.shopifyClientSecret).update(sorted.toString()).digest('hex'));return result;};
+  try{await service.finish('shopify',params(),owner,session);assert.equal(service.status()[1].fulfillmentEnabled,true);assert.equal(service.status()[1].locationsEnabled,true);const original=db.prepare("SELECT encrypted_tokens FROM connections WHERE provider='shopify'").get().encrypted_tokens;
+    writable=false;await assert.rejects(service.finish('shopify',params(),owner,session),/requested permissions/);assert.equal(db.prepare("SELECT encrypted_tokens FROM connections WHERE provider='shopify'").get().encrypted_tokens,original);
+  }finally{db.close();}
+});
+
+test('permission verification migrates legacy token metadata only from actual provider grants and preserves credentials',async()=>{
+  let writable=false,calls=0;
+  const {db,owner,service}=setup(async(url,options)=>{calls++;assert.equal(options.headers['X-Shopify-Access-Token'],'mock-legacy-token');assert.ok(JSON.parse(options.body).query.includes('OperationsPermissions'));return response({data:{currentAppInstallation:{accessScopes:['read_orders','read_products','read_locations',`${writable?'write':'read'}_merchant_managed_fulfillment_orders`].map(handle=>({handle}))}}});},{allowFulfillment:true});
+  db.prepare("INSERT INTO connections(provider,account,encrypted_tokens,updated_at,last_sync) VALUES('shopify',?,?, 'old','existing-sync')").run(config.shop,encrypt({accessToken:'mock-legacy-token',refreshToken:'mock-refresh-token',expiresAt:null},config.key,'shopify'));
+  const context={path:'/api/integrations/shopify/permissions',req:{method:'POST'},user:owner,json:(status,data)=>{context.result={status,data};}};
+  try{await assert.rejects(service.handle({...context,user:{...owner,role:'member'}}),/owner/);assert.equal(calls,0);await service.handle(context);assert.equal(context.result.data.fulfillmentEnabled,false);assert.equal(context.result.data.locationsEnabled,true);
+    writable=true;await service.handle(context);assert.equal(context.result.data.fulfillmentEnabled,true);const stored=db.prepare("SELECT encrypted_tokens,last_sync FROM connections WHERE provider='shopify'").get();assert.equal(stored.last_sync,'existing-sync');const tokens=decrypt(stored.encrypted_tokens,config.key,'shopify');assert.equal(tokens.accessToken,'mock-legacy-token');assert.equal(tokens.refreshToken,'mock-refresh-token');assert.equal(tokens.scopes.includes('write_merchant_managed_fulfillment_orders'),true);
+  }finally{db.close();}
+});
+
 test('Gmail OAuth binds state to owner and session, uses PKCE, refreshes encrypted tokens, and safely replaces inbox snapshots',async()=>{
   let authUrl,tokenRequests=0,wrongAccount=false,providerFails=false;
   const calls=[];
@@ -138,7 +158,7 @@ test('Shopify fulfillment requires granted write scopes, unchanged orders, match
   try{
     db.prepare("INSERT INTO connections(provider,account,encrypted_tokens,updated_at) VALUES('shopify',?,?,?)").run(config.shop,encrypt({accessToken:'test-token',scopes:'read_orders,read_products'},config.key,'shopify'),'now');
     await assert.rejects(service.verifyOrder(order),/permissions/);
-    db.prepare("UPDATE connections SET encrypted_tokens=? WHERE provider='shopify'").run(encrypt({accessToken:'test-token',scopes:'read_orders,read_products,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders'},config.key,'shopify'));
+    db.prepare("UPDATE connections SET encrypted_tokens=? WHERE provider='shopify'").run(encrypt({accessToken:'test-token',scopes:'read_orders,read_products,write_merchant_managed_fulfillment_orders'},config.key,'shopify'));
     changed=true;await assert.rejects(service.verifyOrder(order),/changed/);changed=false;
     await assert.rejects(service.fulfill(order,{tracking:'SIM-not-live'}),/Verified provider tracking/);
     const result=await service.fulfill(order,{tracking:'TRACK-ONE',trackingUrl:'https://tracking.example.test/one'});assert.equal(result.id,'gid://shopify/Fulfillment/1');assert.equal(mutations,1);

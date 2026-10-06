@@ -1,0 +1,3 @@
+query OperationsPermissions {
+  currentAppInstallation { accessScopes { handle } }
+}
