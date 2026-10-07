@@ -91,6 +91,7 @@ test('Gmail OAuth binds state to owner and session, uses PKCE, refreshes encrypt
     assert.equal(tokenRequests,2);
     assert.equal((await service.sync('gmail',owner)).count,2);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM external_records').get().count,2);
+    assert.equal(calls.filter(call=>call.url.includes('/messages/message')).length,2,'unchanged inbox message metadata is reused on subsequent syncs');
     providerFails=true;
     await assert.rejects(service.sync('gmail',owner),/access was denied/);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM external_records').get().count,2);
