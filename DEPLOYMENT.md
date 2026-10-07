@@ -1,6 +1,6 @@
 # Existing Render deployment
 
-Operations desk already runs at https://operations-desk.onrender.com, with existing business data and read-only Gmail/Canada Shopify connections. The current local changes are **not deployed**. `render.yaml` describes the existing single-instance Starter service and persistent disk; do not create a replacement service or delete its disk.
+Operations desk already runs at https://operations-desk.onrender.com, with existing business data and read-only Gmail and approved Shopify Canada fulfillment connections. The warehouse release `cebfe83cf5c59cf199a6c8862359b8775205b2ca` is successfully deployed and live. Further changes still require review and authorization. `render.yaml` describes the existing single-instance Starter service and persistent disk; do not create a replacement service or delete its disk.
 
 ## Preserve the current service
 
@@ -21,6 +21,6 @@ Operations desk already runs at https://operations-desk.onrender.com, with exist
 
 ## Current readiness
 
-Local tests pass on Node.js 24.21.0. Easyship's actual sandbox rate/draft/label/tracking path passed with fictional data. Freightcom and Bambu API grants remain pending. USA OAuth setup, approved sending/fulfillment consent, actual shipping configuration, and live deployment verification remain outstanding. Support attachments, live supplier execution, cross-border/split shipping, and issued/delivered invoices are not complete.
+All 34 tests pass on Node.js 24.21.0 and in the Render build. The warehouse release is live. Shopify Canada grants and Easyship production access are verified; Richmond origin is configured. Production rates returned 18 options with fictional verification data, without a label purchase. The pre-release SQLite backup passed an isolated restore check. Remaining SKU safety declarations await owner information. Freightcom credentials/payment method and USA OAuth are unconfigured; Bambu API access remains pending. Gmail sending, support attachments, live supplier execution, cross-border/split shipping, and issued/delivered invoices are not complete.
 
 See [MASTER_OPS_PLAN.md](MASTER_OPS_PLAN.md) for the acceptance ledger and [INTEGRATIONS.md](INTEGRATIONS.md) for exact configuration. Production backups/restore, monitoring, secure account recovery/MFA, and operating ownership still need verification before full everyday use. Do not call this a completed master desk until those requirements and all requested workflows are met.

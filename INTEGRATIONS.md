@@ -1,6 +1,6 @@
 # Account integrations
 
-The existing Render app at https://operations-desk.onrender.com has Gmail and Canada Shopify read-only connections. New features below require the reviewed warehouse release and separately granted production permissions. Preserve `OPS_TOKEN_KEY`, provider applications, existing consent, and `/var/data/operations.sqlite` across releases. Never paste credentials into chat or commit them.
+The existing Render app at https://operations-desk.onrender.com has a read-only Gmail connection and approved, verified Shopify Canada fulfillment/location access. The warehouse release and Easyship production connection are live. Preserve `OPS_TOKEN_KEY`, provider applications, existing consent, and `/var/data/operations.sqlite` across releases. Never paste credentials into chat or commit them.
 
 ## Configuration
 
@@ -47,11 +47,11 @@ Base scopes: read_orders, read_products. Optional shipping requires read_locatio
 
 ## Freightcom and Easyship
 
-Easyship Operations desk connection creation was approved. Access was narrowed to addresses/boxes/courier services read, label write, shipment read/write, shipment document/track/rate/tax read. Production and sandbox credentials are stored privately outside Git. Fictional Easyship sandbox rate → draft → label → tracking verification passed; no real paid label was purchased. Production credentials are not installed in Render by this code.
+Easyship Operations desk connection creation was approved. Access was narrowed to addresses/boxes/courier services read, label write, shipment read/write, shipment document/track/rate/tax read. Production and sandbox credentials are stored privately outside Git. Fictional Easyship sandbox rate → draft → label → tracking verification passed; no real paid label was purchased. The existing production token is now installed privately in the existing Render service with owner approval.
 
-Freightcom's API access request was approved, submitted, and confirmed. Vendor approval is pending; adapter behavior is mocked in automated tests. Both accounts must be available for a complete comparison; partial provider failures are displayed and never presented as a verified best price across both.
+Freightcom's API access request was approved, submitted, and confirmed. Credentials/payment method remain unconfigured; adapter behavior is mocked in automated tests. Both accounts must be available for a complete comparison; partial provider failures are displayed and never presented as a verified best price across both.
 
-Owner configures origins and SKU shipping declarations in Shipping setup & jobs. Live requests require verified HS classifications, company/contact addresses, and correct Shopify location. Saved packages normalize units and retain versioned quote snapshots. Changed order/package/origin/product data or expired quotes requires fresh comparison. Every unit must be scanned before owner approval. Paid/unknown label outcomes are reconciled from durable jobs, not automatically repurchased. An unpaid Easyship draft can be cancelled only after provider verification and explicit owner confirmation.
+Owner configures origins and SKU shipping declarations in Shipping setup & jobs. Domestic requests require a supported item category or verified HS classification, explicit battery/dangerous-goods declarations, company/contact addresses, and correct Shopify location. Manufacturing country is optional for domestic requests. Saved packages normalize units and retain versioned quote snapshots. Changed order/package/origin/product data or expired quotes requires fresh comparison. Every unit must be scanned before owner approval. Paid/unknown label outcomes are reconciled from durable jobs, not automatically repurchased. An unpaid Easyship draft can be cancelled only after provider verification and explicit owner confirmation.
 
 Cross-border, dangerous-goods, multiple-parcel, and split fulfillment workflows are blocked pending implementation and actual carrier validation.
 
@@ -75,3 +75,7 @@ Disconnect removes that provider's saved tokens/imported snapshot, not durable o
 Tests simulate provider authorization, signatures, encryption, snapshots, scopes, store separation, fulfillment, unknown sends/purchases, and privacy. They do not establish live write readiness. Preserve data and verify the approved live release separately.
 
 Warehouse addresses can be loaded directly from Shopify after read_locations is granted. Imported line items retain Shopify HS code and manufacturing country when provided. Battery and dangerous-goods declarations require explicit SKU review; missing declarations block production rate requests.
+
+## Live warehouse configuration (October 6, 2026)
+
+Easyship production credential is installed in Render. Shopify Canada grants are verified from currentAppInstallation.accessScopes; the app correctly treats write scopes as including matching reads. Read-only synchronization runs every 300 seconds. Richmond origin is linked to Canada Main Branch. Domestic items may use a supported Easyship category instead of a customs HS code; manufacturing country remains optional for domestic shipping. Battery/dangerous-goods declarations remain required, and cross-border/dangerous-goods shipments remain blocked. Remaining SKU safety profiles require owner information; no manufacturing origin is guessed.
