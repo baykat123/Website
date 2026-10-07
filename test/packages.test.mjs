@@ -21,5 +21,8 @@ test('saved packages convert units, retain quote snapshots, reject stale edits, 
     assert.equal((await call(`/api/packages/${pkg.id}`,{version:3,archived:false})).status,200);
     assert.equal((await call('/api/packages')).data[0].archived,false);
     assert.equal(resolvePackage(app.db,{savedPackageId:pkg.id,kg:7}).kg,7);
+    const dimensionsOnly=(await call('/api/packages',{...input,name:'Dimensions only carton',weight:''})).data;assert.equal(dimensionsOnly.body.kg,null);
+    assert.throws(()=>resolvePackage(app.db,{savedPackageId:dimensionsOnly.id}),/valid weight/);
+    assert.equal(resolvePackage(app.db,{savedPackageId:dimensionsOnly.id,kg:3}).kg,3);
   }finally{await new Promise(resolve=>app.server.close(resolve));app.db.close();}
 });

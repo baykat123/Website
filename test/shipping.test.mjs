@@ -29,6 +29,14 @@ test('Easyship does not buy a label when its prepared shipment exceeds the appro
   const rate={provider:'easyship',serviceId:'selected',priceCents:1500,currency:'CAD',context:{from:address,to:address,parcel,store:order.store,orderName:'#1001',currency:'CAD',items:[]}};
   await assert.rejects(service.book(rate,'operation-one',id=>ref=id),/exceeds approval/);assert.equal(ref,'shipment-one');assert.equal(purchases,0);
 });
+
+test('domestic categories can replace HS codes without inventing a manufacturing country or permitting missing safety declarations',async()=>{
+  let calls=0;
+  const service=createShipping({config:{mode:'live',easyshipToken:'mock-key'},fetcher:async(url,options)=>{calls++;const item=JSON.parse(options.body).parcels[0].items[0];assert.equal(item.category,'accessory_no_battery');assert.equal(item.hs_code,undefined);assert.equal(item.origin_country_alpha2,undefined);return response({rates:[{courier_service:{id:'sample',name:'Sample'},currency:'CAD',total_charge:10}]});}});
+  const domestic={...order,body:{...order.body,items:[{...order.body.items[0],hsCode:'',countryOfOrigin:'',category:'accessory_no_battery'}]}};
+  const quote=await service.quote(domestic,parcel,address);assert.equal(quote.rates.length,1);assert.equal(calls,1);
+  await assert.rejects(service.quote({...domestic,body:{...domestic.body,items:[{...domestic.body.items[0],battery:undefined}]}},parcel,address),/declarations/);assert.equal(calls,1);
+});
 test('booking timeouts retain provider reference and cannot trigger duplicate purchase; reconciliation can finish tracking',async()=>{
   const db=openStore(':memory:'),user={id:addUser(db,'owner','shipping-test-password')};
   db.prepare('INSERT INTO ops_orders(store,external_id,body,updated_at) VALUES(?,?,?,?)').run(order.store,'external-order',JSON.stringify(order.body),'now');
