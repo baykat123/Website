@@ -11,4 +11,4 @@ Proposed external actions must remain approval-first. Capture corrections and re
 
 Bambu PRM and USA API access is pending, as confirmed by the user on October 6, 2026. No email is required. Prepare and test internal purchase/receiving workflows with fictional data; do not contact Bambu or automate portal purchases as a substitute for approved API access.
 
-Current warehouse release is cebfe83cf5c59cf199a6c8862359b8775205b2ca. Remaining SKU battery/dangerous-goods declarations await owner input; do not invent these fields. See MASTER_OPS_PLAN.md for the verified state and limits.
+Current warehouse release is cebfe83cf5c59cf199a6c8862359b8775205b2ca. The owner confirmed regular shipping/no special handling on October 6. All 62 current outstanding-order SKUs now have profiles (63 saved total); 19 imported lines without SKUs remain blocked pending actual scan identifiers. Future battery/liquid products need accurate declarations; do not invent these fields. See MASTER_OPS_PLAN.md for the verified state and limits.
