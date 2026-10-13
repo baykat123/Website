@@ -32,8 +32,8 @@ test('Easyship does not buy a label when its prepared shipment exceeds the appro
 
 test('domestic categories can replace HS codes without inventing a manufacturing country or permitting missing safety declarations',async()=>{
   let calls=0;
-  const service=createShipping({config:{mode:'live',easyshipToken:'mock-key'},fetcher:async(url,options)=>{calls++;const item=JSON.parse(options.body).parcels[0].items[0];assert.equal(item.category,'accessory_no_battery');assert.equal(item.hs_code,undefined);assert.equal(item.origin_country_alpha2,undefined);return response({rates:[{courier_service:{id:'sample',name:'Sample'},currency:'CAD',total_charge:10}]});}});
-  const domestic={...order,body:{...order.body,items:[{...order.body.items[0],hsCode:'',countryOfOrigin:'',category:'accessory_no_battery'}]}};
+  const service=createShipping({config:{mode:'live',easyshipToken:'mock-key'},fetcher:async(url,options)=>{calls++;const item=JSON.parse(options.body).parcels[0].items[0];assert.equal(item.category,'accessory_no_battery');assert.equal(item.sku,undefined);assert.equal(item.hs_code,undefined);assert.equal(item.origin_country_alpha2,undefined);return response({rates:[{courier_service:{id:'sample',name:'Sample'},currency:'CAD',total_charge:10}]});}});
+  const domestic={...order,body:{...order.body,items:[{...order.body.items[0],sku:'',hsCode:'',countryOfOrigin:'',category:'accessory_no_battery'}]}};
   const quote=await service.quote(domestic,parcel,address);assert.equal(quote.rates.length,1);assert.equal(calls,1);
   await assert.rejects(service.quote({...domestic,body:{...domestic.body,items:[{...domestic.body.items[0],battery:undefined}]}},parcel,address),/declarations/);assert.equal(calls,1);
 });

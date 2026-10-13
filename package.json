@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@shopify/shopify-api": "15.0.0",
+    "bwip-js": "^4.11.4",
     "pdfkit": "0.20.2"
   }
 }

@@ -74,7 +74,7 @@ export function createApp({ dbPath, secureCookies = false, integrations: integra
       if (handlePackages({db,path,req,body,user,json})) return;
       if (req.method==='GET'&&path==='/api/sync/status') { if(!user) return json(401,{error:'Sign in required'}); return json(200,monitor.status()); }
       if (await shippingJobs.handle({path,req,body,user,json})) return;
-      if (await handleOperations({db,path,req,body,user,json,shipping,shippingJobs})) return;
+      if (await handleOperations({db,path,req,body,user,json,res,shipping,shippingJobs})) return;
       if (await handleProposals({db,path,req,body,user,json,integrations})) return;
       if (handleTeam({db,path,req,body,user,json,res})) return;
       if (await integrations.handle({db,path,req,body,user,sessionHash:cookie ? tokenHash(cookie) : '',json,res,url})) return;

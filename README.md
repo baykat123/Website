@@ -53,3 +53,9 @@ For Google Workspace and Shopify, follow [INTEGRATIONS.md](INTEGRATIONS.md) to r
 No provider credentials are required for local business records, team features, or the simulated-provider tests. QuickBooks remains optional; select it only if you want accounting integration. Read-only polling is available through `OPS_SYNC_INTERVAL_SECONDS`; external actions still require approval.
 
 Durable shipping jobs and approved-email outcomes distinguish successful, failed, and uncertain writes. Never retry an uncertain purchase or send blindly. Automatic external execution remains unavailable until an explicit per-action policy and further provider validation exist.
+
+## Canada order identifiers
+
+Blank order SKUs are recovered from the current Shopify variant when a real variant SKU exists. Source SKU and recovery provenance are retained. Lines that genuinely have no SKU use separate `OPS-L-…` desk labels tied to their Shopify line IDs; these labels do not replace or manufacture a catalog SKU. Custom job attributes appear in packing and on printable 4-by-6 barcode labels. Changes to custom job specifications invalidate older desk labels and retire scan evidence without deleting history. Printing labels does not record scans or fulfill an order.
+
+The owner-confirmed regular-shipping profiles can be saved against a stable desk-line profile key. Quotes and Shopify fulfillment retain original line IDs, quantities, financial amounts, and store separation. Every physical unit still needs a scan before an owner approves booking. Source lines without both a usable SKU and a Shopify line ID remain blocked.

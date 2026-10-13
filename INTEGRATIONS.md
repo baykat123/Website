@@ -79,3 +79,9 @@ Warehouse addresses can be loaded directly from Shopify after read_locations is 
 ## Live warehouse configuration (October 6, 2026)
 
 Easyship production credential is installed in Render. Shopify Canada grants are verified from currentAppInstallation.accessScopes; the app correctly treats write scopes as including matching reads. Read-only synchronization runs every 300 seconds. Richmond origin is linked to Canada Main Branch. Domestic items may use a supported Easyship category instead of a customs HS code; manufacturing country remains optional for domestic shipping. Battery/dangerous-goods declarations remain required, and cross-border/dangerous-goods shipments remain blocked. Remaining SKU safety profiles require owner information; no manufacturing origin is guessed.
+
+## Canada identifier repair (October 13, 2026)
+
+Order and paginated line queries also retrieve current variant SKUs and custom job attributes. A real variant SKU can recover a blank order SKU. Otherwise, an internal desk label identifies the exact source line; its shipping classification uses a stable `OPS-L-…` profile key while the scanned barcode also identifies revised custom job details. No upstream Shopify product, order amount, customer address, or fulfillment state is changed by this repair.
+
+Freightcom approved the account application and requested a signed API licence before issuing credentials. The owner approved signing and returning the licence on October 13; it was returned with the PDF attachment verified in Sent mail. Production API token/payment setup and provider verification remain pending actual credentials. USA setup remains deferred.

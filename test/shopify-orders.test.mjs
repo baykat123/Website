@@ -27,3 +27,11 @@ test('shipping classifications come from the provider without inventing missing 
   const normalized=normalizeOrder(order('classified',[item]),'sample').items[0];
   assert.equal(normalized.hsCode,'392690');assert.equal(normalized.countryOfOrigin,'CA');assert.equal(normalized.battery,undefined);assert.equal(normalized.dangerousGoods,undefined);
 });
+
+test('current variant SKUs repair blank order SKUs while preserving source and custom job details',()=>{
+  const item=line('recovered');item.sku='  ';item.variant.sku='VERIFIED-PART';item.customAttributes=[{key:'Part drawing',value:'Sample rev B'}];
+  const restored=normalizeOrder(order('restored',[item]),'sample').items[0];
+  assert.equal(restored.sku,'VERIFIED-PART');assert.equal(restored.sourceSku,'');assert.equal(restored.skuSource,'variant');assert.deepEqual(restored.customAttributes,item.customAttributes);
+  item.sku='ORIGINAL-PART';assert.equal(normalizeOrder(order('original',[item]),'sample').items[0].sku,'ORIGINAL-PART');
+  item.sku='';delete item.variant.sku;assert.equal(normalizeOrder(order('missing',[item]),'sample').items[0].sku,'');
+});

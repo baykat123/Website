@@ -58,3 +58,11 @@ Bambu portals: https://prm.bambulab.com/#/index and https://us.store.bambulab.co
 ## Live warehouse status — October 6, 2026
 
 Release `cebfe83cf5c59cf199a6c8862359b8775205b2ca` is successfully deployed/live on the existing Render service. Easyship production access and Shopify Canada fulfillment/location grants are verified. Richmond origin is configured. A production rate query returned 18 CAD options with fictional verification data and no label purchase. Three PETG HF G02 profiles retain manufacturer SDS declarations; 60 more profiles use the owner-confirmed regular-shipping rule. All 62 outstanding-order SKUs are covered by 63 saved profiles. Nineteen imported lines lack SKUs and need actual scan identifiers; Freightcom credentials remain unconfigured. Domestic single-parcel supported shipments only. Bambu remains pending/excluded, USA is not connected by the Canada grant, and Gmail sending remains disabled.
+
+## October 13 Canada repair
+
+Render access was restored through the original owner account. Release `9629e406f9560f0060c5059825b8499b072eeb2d` is deployed successfully; Gmail and Shopify read synchronization are healthy. The current app audit found 24 missing-SKU lines across 53 active Canada orders, all with usable Shopify line IDs. The broader connected-store audit also includes older orders outside the app's current imported history.
+
+The new repair is prepared with 39 passing tests and Shopify 2026-10 validation. It preserves real/source SKUs, recovers actual variant SKUs when present, and uses distinct, revision-aware desk barcodes for genuine no-SKU lines. Rendered 4-by-6 sample barcode labels decoded correctly. A fresh production backup passed integrity verification and retained existing encrypted connections. Deployment and live acceptance of this repair are recorded separately after verification.
+
+Freightcom's signed licence was returned with owner approval; its actual API credentials remain pending. USA and Bambu integrations are outside this repair. No label purchase or customer-order fulfillment is used as a setup test.

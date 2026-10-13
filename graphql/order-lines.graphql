@@ -4,9 +4,10 @@ query OperationsOrderLines($id: ID!, $after: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         id title sku currentQuantity unfulfilledQuantity requiresShipping
+        customAttributes { key value }
         originalUnitPriceSet { shopMoney { amount currencyCode } }
         priceAfterAllDiscountsBeforeTaxesSet { shopMoney { amount currencyCode } }
-        variant { id barcode inventoryItem { harmonizedSystemCode countryCodeOfOrigin } }
+        variant { id sku barcode inventoryItem { harmonizedSystemCode countryCodeOfOrigin } }
       }
     }
   }
