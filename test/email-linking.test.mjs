@@ -12,6 +12,7 @@ test('email matching requires exact reference and customer identity, rejects amb
     putEmail('exact','Question about #1001');assert.equal(emailSuggestions(db).length,1);assert.equal(autoLinkEmails(db,user),1);assert.equal(autoLinkEmails(db,user),0);
     putEmail('other-person','Question about #100','other@example.test');assert.equal(emailSuggestions(db)[0].autoLink,false);
     const second=putOrder('two.myshopify.com','#100');putEmail('ambiguous','Question about #100');assert.equal(emailSuggestions(db).filter(item=>item.emailId==='ambiguous').every(item=>!item.autoLink),true);
+    const scoped=emailSuggestions(db,{orderId:second}).filter(item=>item.emailId==='ambiguous');assert.equal(scoped.length,1);assert.equal(scoped[0].autoLink,false,'order-specific reads still detect references shared across stores');assert.match(scoped[0].reason,/multiple stores/);
     db.prepare("INSERT INTO ops_email_decisions VALUES(?,?,'rejected',?,'now')").run(second,'ambiguous',user.id);assert.equal(emailSuggestions(db).filter(item=>item.emailId==='ambiguous').length,1);
     db.prepare("DELETE FROM external_records WHERE external_id='exact'").run();assert.equal(db.prepare('SELECT COUNT(*) AS n FROM ops_notes WHERE order_id=?').get(first).n,1);
   }finally{db.close();}

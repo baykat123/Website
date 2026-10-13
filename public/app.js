@@ -335,6 +335,7 @@ async function renderOrderDesk(container) {
   container.append(navigation);
   const order=orders.find(order=>order.id===selectedOpsOrder) ?? orders[0];selectedOpsOrder=order.id;
   const card=el('section',undefined,'record');card.append(el('h2',`${order.body.title} · ${order.store}`),el('p',`Shopify reference: ${order.external_id}`));
+  container.append(card);
   if(order.body.amount)card.append(el('p',`${order.body.currency} ${order.body.amount} · ${order.body.financialStatus} · ${order.body.fulfillmentStatus}`));
   if(order.invoice) {const invoiceLink=el('a',`Download invoice draft #${order.invoice.recordId}`,'authorization-link');invoiceLink.href=`/api/records/${order.invoice.recordId}/pdf`;card.append(invoiceLink);if(order.invoice.needsReview)card.append(el('p','Order changed after this invoice draft was prepared. Review the invoice amounts before issuing.'));}
   else card.append(el('p','An invoice draft is prepared automatically for a paid order once its complete line-item, shipping, tax, and total amounts agree.'));
@@ -364,25 +365,24 @@ async function renderOrderDesk(container) {
     for(const [label,value] of [['View label',shipment.label_url],['Track shipment',shipment.tracking_url]])if(value){try{const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password)continue;const link=el('a',label,'authorization-link');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';card.append(link);}catch{}}
   }
   card.append(el('h2','Order notes & linked email'));
-  const suggestions=(currentUser.role==='owner'?await api('/api/ops/email-suggestions'):[]).filter(item=>item.orderId===order.id);
+  const suggestions=currentUser.role==='owner'?await api(`/api/ops/email-suggestions?orderId=${order.id}`):[];
   for(const suggestion of suggestions){const candidate=el('div',undefined,'rate-option');candidate.append(el('span',`${suggestion.email.title}: ${suggestion.reason}`));
     for(const [label,reject] of [['Link to order',false],['Reject suggested link',true]]){const button=el('button',label,'quiet');button.onclick=async()=>{button.disabled=true;try{await api(`/api/ops/orders/${order.id}/email`,{emailId:suggestion.emailId,reject});await render();}catch(error){notice(error.message);button.disabled=false;}};candidate.append(button);}card.append(candidate);}
 
   for(const note of order.notes)card.append(el('p',`${note.username} · ${note.kind} · ${new Date(note.created_at).toLocaleString()}
 ${note.content}`,'notes'));
   card.append(opsForm([opsField('Add internal order note','content','','textarea')],'Save order note',data=>api(`/api/ops/orders/${order.id}/note`,data)));
-  const imported=await api('/api/integrations/records'), emails=imported.filter(record=>record.provider==='gmail'&&record.type==='message');
-  if(emails.length && currentUser.role==='owner') {
+  if(currentUser.role==='owner') {
     const label=el('label','Select email to attach to order notes'),select=el('select');select.name='emailId';
-    for(const email of emails){const option=el('option',`${email.body.title} · ${email.body.contact}`);option.value=email.external_id;select.append(option);}label.append(select);
-    card.append(opsForm([label],'Link selected email',data=>api(`/api/ops/orders/${order.id}/email`,data)));
+    const search=el('input');search.type='search';search.maxLength=160;search.setAttribute('aria-label','Find imported email by subject or sender');const find=el('button','Search imported mail','quiet'),older=el('button','Older mail','quiet'),newer=el('button','Newer mail','quiet'),pager=el('div',undefined,'actions');pager.append(search,find,newer,older);let offset=0;
+    const loadEmails=async()=>{for(const button of [find,newer,older])button.disabled=true;try{const emails=await api(`/api/integrations/records?provider=gmail&limit=50&offset=${offset}&q=${encodeURIComponent(search.value.trim())}`);select.replaceChildren();for(const email of emails){const option=el('option',`${email.body.title} · ${email.body.contact}`);option.value=email.external_id;select.append(option);}linkForm.querySelector('button').disabled=!emails.length;older.disabled=emails.length<50;newer.disabled=offset===0;}catch(error){notice(error.message);}finally{find.disabled=false;}};
+    label.append(select);const linkForm=opsForm([label],'Link selected email',data=>api(`/api/ops/orders/${order.id}/email`,data));find.onclick=()=>{offset=0;loadEmails();};older.onclick=()=>{offset+=50;loadEmails();};newer.onclick=()=>{offset=Math.max(0,offset-50);loadEmails();};card.append(pager,linkForm);await loadEmails();
   }
   card.append(el('h2','Support / warranty claim'));
   const category=el('label','Category'),select=el('select');select.name='category';
   for(const value of ['warranty','support','return','shipping']){const option=el('option',value);option.value=value;select.append(option);}category.append(select);
   card.append(opsForm([category,opsField('Ticket title','title'),opsField('Claim / support details','details','','textarea')],'Open ticket',data=>api(`/api/ops/orders/${order.id}/ticket`,data)));
   for(const ticket of order.tickets)card.append(el('p',`Ticket #${ticket.id}: ${ticket.title} · ${ticket.status}`));
-  container.append(card);
 }
 async function renderTickets(container) {
   if(currentUser.role==='owner'){

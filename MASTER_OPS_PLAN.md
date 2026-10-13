@@ -66,3 +66,5 @@ Render access was restored through the original owner account. Release `9629e406
 The new repair is prepared with 39 passing tests and Shopify 2026-10 validation. It preserves real/source SKUs, recovers actual variant SKUs when present, and uses distinct, revision-aware desk barcodes for genuine no-SKU lines. Rendered 4-by-6 sample barcode labels decoded correctly. A fresh production backup passed integrity verification and retained existing encrypted connections. Deployment and live acceptance of this repair are recorded separately after verification.
 
 Freightcom's signed licence was returned with owner approval; its actual API credentials remain pending. USA and Bambu integrations are outside this repair. No label purchase or customer-order fulfillment is used as a setup test.
+
+Live acceptance also identified an unnecessary full-inbox fetch on every order open. The follow-up repair uses order-scoped suggestions and searchable 50-message pages, retains all imported history, and preserves owner-only access to raw mail. All 40 tests pass, including cross-store ambiguity and paginated inbox privacy checks.
